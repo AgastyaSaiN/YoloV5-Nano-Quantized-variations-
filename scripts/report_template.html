@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quantizing YOLOv5n with an FP32 Detection Head</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  html { background: #fff; }
+  body {
+    margin: 0; color: #1a1a1a; background: #fff;
+    font: 17px/1.65 Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+  }
+  .page { max-width: 780px; margin: 0 auto; padding: 64px 24px 96px; }
+  h1, h2, h3, .meta, table, figcaption, .label {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  h1 { font-size: 30px; line-height: 1.25; font-weight: 700; margin: 0 0 10px; letter-spacing: -0.01em; }
+  .meta { color: #666; font-size: 14px; margin: 0 0 36px; padding-bottom: 20px; border-bottom: 1px solid #ddd; }
+  h2 { font-size: 20px; margin: 48px 0 12px; font-weight: 700; }
+  h3 { font-size: 15px; margin: 28px 0 6px; font-weight: 700; }
+  p { margin: 0 0 14px; }
+  code { font: 0.88em Consolas, "SF Mono", Menlo, monospace; background: #f5f5f5; padding: 1px 5px; border-radius: 3px; }
+  a { color: #0b57d0; }
+
+  /* summary box */
+  .summary { border-top: 2px solid #1a1a1a; border-bottom: 1px solid #ddd; padding: 18px 0 6px; margin: 0 0 8px; }
+  .summary p { margin-bottom: 12px; }
+
+  /* tables: rules only */
+  table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 8px 0 6px; }
+  caption { text-align: left; font-weight: 700; padding: 0 0 8px; font-size: 14px; }
+  th, td { padding: 7px 10px 7px 0; text-align: right; font-variant-numeric: tabular-nums; vertical-align: top; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { border-top: 1.5px solid #1a1a1a; border-bottom: 1px solid #1a1a1a; font-weight: 600; }
+  tbody tr { border-bottom: 1px solid #eee; }
+  tbody tr:last-child { border-bottom: 1.5px solid #1a1a1a; }
+  tr.rec td { font-weight: 700; }
+  td.desc { text-align: left; color: #555; font-weight: 400; }
+  .tablewrap { overflow-x: auto; }
+
+  /* figures */
+  figure { margin: 28px 0; }
+  figure img { display: block; width: 100%; height: auto; }
+  figcaption { font-size: 13.5px; color: #444; margin-top: 10px; line-height: 1.5; }
+  figcaption b { color: #1a1a1a; }
+
+  /* definitions */
+  dl { margin: 0; font-size: 16px; }
+  dt { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; font-weight: 700; font-size: 14.5px; margin-top: 16px; }
+  dd { margin: 2px 0 0; color: #333; }
+
+  ul { padding-left: 22px; margin: 0 0 14px; }
+  li { margin: 5px 0; }
+
+  /* number line figure */
+  .nl { margin: 30px 0 14px; }
+  .nl svg { width: 100%; height: auto; display: block; font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+
+  footer { margin-top: 64px; padding-top: 16px; border-top: 1px solid #ddd; color: #777; font: 13px/1.5 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+
+  @media print {
+    .page { padding: 0; max-width: none; }
+    h2 { break-after: avoid; } figure, table { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+
+<h1>Quantizing YOLOv5n to INT8 while Keeping the Detection Head in FP32</h1>
+<p class="meta">Benchmark report &nbsp;|&nbsp; Model: YOLOv5nu (ultralytics) &nbsp;|&nbsp; Test set: 1,000 held-out COCO val2017 images &nbsp;|&nbsp; Runtime: ONNX Runtime, CPU</p>
+
+<div class="summary">
+  <p><b>Summary.</b> We compressed the YOLOv5 nano object detector from 32-bit to 8-bit numbers (INT8 quantization) and left the final detection layer untouched. The best version, <b>v1</b>, is <b>{{SIZE_CUT_V1}}% smaller</b> and <b>{{FASTER_V1}}% faster</b> than the original, and loses only <b>{{LOSS_V1}}%</b> of its accuracy ({{MAP_V1}} vs {{MAP_BASE}} mAP50-95).</p>
+  <p>The detection layer matters. When we compressed it as well, accuracy fell to zero. Section 4 explains why.</p>
+</div>
+
+<h2>1. What was tested</h2>
+<p>Quantization stores a model's numbers in a smaller format so the file is smaller and inference is faster, at the cost of some precision. We built four compressed variants of YOLOv5n and one deliberate failure case, then scored all of them against the original on the same 1,000 labelled photos. None of those photos were used to calibrate the compressed models.</p>
+
+<div class="tablewrap">
+<table>
+  <caption>Table 1. The models compared</caption>
+  <thead><tr><th>Model</th><th style="text-align:left">What is different</th></tr></thead>
+  <tbody>
+    <tr><td>Original</td><td class="desc">Full 32-bit precision. The baseline.</td></tr>
+    <tr class="rec"><td>v1</td><td class="desc" style="font-weight:400">INT8 backbone and neck; detection layer unchanged. Percentile calibration.</td></tr>
+    <tr><td>v2</td><td class="desc">As v1, with min-max calibration.</td></tr>
+    <tr><td>v3</td><td class="desc">As v1, with percentile calibration that clips outliers harder (99.99).</td></tr>
+    <tr><td>v4</td><td class="desc">As v1, and the three layers feeding the detection layer also kept in FP32.</td></tr>
+    <tr><td>Control</td><td class="desc">Everything INT8, including the detection layer. Included to show why it must be protected.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>2. Accuracy</h2>
+<p>All four versions that protect the detection layer stay within about 1.4% of the original. The control model scores zero.</p>
+
+<figure>
+  <img src="{{IMG1}}" alt="Bar chart of accuracy (mAP50-95) for each model">
+  <figcaption><b>Figure 1.</b> Accuracy (mAP50-95, higher is better). Bars start at zero. The compressed models are nearly indistinguishable from the original; the control, whose detection layer was also compressed, scores 0.000.</figcaption>
+</figure>
+
+<figure>
+  <img src="{{IMG3}}" alt="Bar chart of the percentage of accuracy lost by each compressed model">
+  <figcaption><b>Figure 2.</b> The same data, zoomed in: accuracy lost relative to the original. The shaded band marks differences smaller than about 0.5%, which are within noise on 1,000 test images.</figcaption>
+</figure>
+
+<h2>3. Size and speed</h2>
+<p>The compressed files are roughly half the size of the original and run 10 to 22% faster on this CPU.</p>
+
+<figure>
+  <img src="{{IMG2}}" alt="Grouped bar chart of file size and time per image as a percentage of the original">
+  <figcaption><b>Figure 3.</b> File size and time per image as a percentage of the original (lower is better). The control is omitted because it does not work. Speed was measured on a single CPU; v1 and v3 share the same structure, so the gap between them is measurement noise.</figcaption>
+</figure>
+
+<div class="tablewrap">
+<table>
+  <caption>Table 2. Full results</caption>
+  <thead><tr><th>Model</th><th>mAP50-95</th><th>mAP50</th><th>Precision</th><th>Recall</th><th>Accuracy lost</th><th>ms / image</th><th>Size (MB)</th></tr></thead>
+  <tbody>
+{{TABLE_ROWS}}
+  </tbody>
+</table>
+</div>
+
+<h2>4. Why the detection layer must stay in FP32</h2>
+<p>The detection layer produces one output table that holds two kinds of numbers side by side: box positions, which run up to 640, and confidence scores, which lie between 0 and 1. INT8 offers only 256 distinct values, and the whole table has to share them.</p>
+
+<div class="nl">
+<svg viewBox="0 0 760 120" role="img" aria-label="A number line from 0 to 640 divided into 256 steps, with the 0 to 1 range barely visible at the left end">
+  <line x1="20" y1="60" x2="740" y2="60" stroke="#1a1a1a" stroke-width="1.5"/>
+  <g stroke="#1a1a1a" stroke-width="1">
+    {{TICKS}}
+  </g>
+  <rect x="20" y="40" width="3" height="40" fill="#c0392b"/>
+  <line x1="21" y1="38" x2="21" y2="22" stroke="#c0392b" stroke-width="1"/>
+  <text x="26" y="18" font-size="12.5" fill="#c0392b">All confidence scores (0 to 1) fall inside this one step</text>
+  <text x="20" y="104" font-size="12.5" fill="#444">0</text>
+  <text x="740" y="104" font-size="12.5" fill="#444" text-anchor="end">640 (box positions)</text>
+  <text x="380" y="104" font-size="12.5" fill="#444" text-anchor="middle">256 equal steps, about 2.5 wide each</text>
+</svg>
+</div>
+
+<p>To make 640 fit, each step has to be about 2.5 wide. Every confidence score, being below 1, then rounds to the same value, zero, and the model appears to detect nothing. That is exactly what the control model does.</p>
+<p>The fix is to leave the detection layer in full precision. For v1 to v4 we checked each of its 19 convolutions against the original: the weights are FP32 and numerically identical, and no quantize or dequantize operations sit inside the layer. The small accuracy loss that remains comes from the rounding in the layers before it.</p>
+
+<h2>5. Recommendation</h2>
+<p>Use <b>v1</b> (<code>models/int8/v1_percentile_head.onnx</code>). It has the smallest file, near-original accuracy, and is among the fastest. v3 is equivalent. v4 costs about 1.1 MB more for no gain in accuracy, and v2 is slightly less accurate.</p>
+
+<h2>6. Limitations</h2>
+<ul>
+  <li><b>Ranking v1 to v4 is not reliable.</b> They differ by under 0.5%, which 1,000 test images cannot separate. The firm conclusions are that a protected head costs about 1% accuracy and an unprotected one destroys the model.</li>
+  <li><b>Speed is approximate.</b> It comes from one CPU and 50 timed runs per model. GPUs, phones and other runtimes will behave differently.</li>
+  <li><b>Data.</b> Calibration used 100 COCO images, and testing used everyday COCO photos. Calibrate and test on your own images before deploying.</li>
+  <li><b>Scope.</b> This covers the ONNX route only. PyTorch-native quantization was not evaluated.</li>
+</ul>
+
+<h2>Appendix. Terms</h2>
+<dl>
+  <dt>mAP50-95</dt><dd>The standard accuracy score for object detectors, from 0 to 1. It rewards finding objects, labelling them correctly and drawing tightly fitting boxes, judged at overlap thresholds from 50% to 95%.</dd>
+  <dt>mAP50</dt><dd>The same score using only the lenient 50% overlap threshold.</dd>
+  <dt>Precision</dt><dd>Of the objects the model reports, the fraction that are correct. High precision means few false alarms.</dd>
+  <dt>Recall</dt><dd>Of the objects actually present, the fraction the model finds. High recall means few misses.</dd>
+  <dt>FP32 and INT8</dt><dd>32-bit floating-point numbers (precise) and 8-bit integers (compact). Quantization converts the former to the latter.</dd>
+  <dt>Calibration</dt><dd>Running sample images through the model to measure each layer's typical value range, so INT8 steps can be placed sensibly. Min-max uses the extremes seen; percentile ignores rare outliers.</dd>
+  <dt>Detection layer (head)</dt><dd>The final layer, which converts internal features into box coordinates, class labels and confidence scores.</dd>
+</dl>
+
+<footer>Generated from <code>results/benchmark_results.json</code> by <code>scripts/make_report.py</code>. Charts: <code>scripts/make_charts.py</code>.</footer>
+
+</main>
+</body>
+</html>

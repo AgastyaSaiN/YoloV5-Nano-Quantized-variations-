@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Datasets (large; re-create with scripts/prepare_data.py)
+data/
+
+# Intermediate / temporary model files
+models/int8/_prep.onnx
+*_prep.onnx
+
+# Old experiments
+archive/
+
+# Ultralytics run output
+runs/
+
+# Logs
+*.log
+results/logs/
+
+# Editor / OS / tooling
+.vscode/
+.idea/
+.claude/
+.DS_Store
+Thumbs.db
