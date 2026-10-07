@@ -1,28 +1,32 @@
 # Python
 __pycache__/
 *.py[cod]
-.venv/
-venv/
 .ipynb_checkpoints/
 
-# Datasets (large; re-create with scripts/prepare_data.py)
+# TensorFlow toolchain environment (recreate from requirements.txt; about 2 GB)
+.venv/
+
+# Datasets and annotations (re-creatable with scripts/prepare_data.py)
 data/
 
-# Intermediate / temporary model files
-models/int8/_prep.onnx
-*_prep.onnx
+# Raw per-model detection files (about 2.6 GB; regenerate with the evaluate_*.py scripts)
+results/dets/
+results/dets_*/
 
-# Old experiments
-archive/
-
-# Ultralytics run output
-runs/
-
-# Logs
+# Logs and profiler dumps
 *.log
 results/logs/
 
-# Editor / OS / tooling
+# Intermediate build files (calibration caches, split ONNX parts, SavedModels)
+models/onnx_int8/_work/
+models/tflite/_work/
+models/onnx_int8/_prep.onnx
+*_prep.onnx
+
+# Downloaded source archive (the extracted vendor/yolov5/ folder is kept)
+vendor/*.zip
+
+# Editor, OS and tooling
 .vscode/
 .idea/
 .claude/

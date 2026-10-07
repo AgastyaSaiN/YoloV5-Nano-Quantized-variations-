@@ -1,69 +1,61 @@
-# Method
-
-How the models were built and tested, so you can reproduce or change it.
+# Day 2 Method
 
 ## Pipeline
+1. **Model:** original YOLOv5n v7.0 (`yolov5n.pt`), exported with the official `export.py` (opset 13, 640x640, FP32) from the downloaded source archive.
+2. **Box normalisation:** `make_normalized_model.py` divides six decode constants in the Detect head (three strides for xy, three anchor grids for wh) by 640, so the box output is 0-1. No extra graph nodes. Verified against the original (maximum difference 6e-5 pixels). Evaluation multiplies boxes by 640 after inference.
+3. **ONNX INT8** (`build_onnx_variants.py`): ONNX Runtime static quantization, QDQ format, weights int8 symmetric, activations uint8, percentile calibration (99.999) on 500 train2017 images. FP32 layers are excluded by node-name prefix: backbone `/model.0-9/`, neck `/model.10-23/`, head `/model.24/`. Per-channel and per-tensor via `per_channel=True/False`.
+4. **TFLite INT8:** the normalised ONNX is split into backbone / neck / head parts (`split_onnx.py`; chained output verified identical to the full model), each converted to a TF SavedModel with onnx2tf (`convert_parts_onnx2tf.sh`), then to TFLite with the TF converter (full-integer, 500 calibration images, min-max, strict INT8 ops). FP32 stages use the float32 conversion. `tflite_runner.py` chains the stages, matching tensors by shape.
+5. **Accuracy** (`common.py`, `evaluate_*.py`): square 640 letterbox, confidence 0.001, NMS IoU 0.6, up to 300 detections, multi-label, as in the official `val.py`; scored with `pycocotools` on all 5000 val2017 images.
+6. **Precision, recall, F1** (`compute_prf.py`): official COCO matching (greedy by score at IoU 0.5, crowd regions ignored, up to 300 detections per image), micro-averaged over classes and images; confidence sweep 0.05-0.95 for P/R/F1 at 0.25 and the best F1.
+7. **Latency** (`benchmark_latency.py`): batch 1, 4 threads, fresh process per measurement; 20 warm-up and 100 timed runs per round; all 14 models interleaved over 9 rounds in shuffled order; figure = median of per-round medians; round spread reported.
+8. **Memory** (`benchmark_memory.py`): fresh process per model; baseline resident memory recorded after the runtime is imported and one input is created; memory added at load and at peak during 35 inferences (2 ms sampler); three repeats, medians reported (`aggregate_memory.py`).
+9. **Profile** (`profile_ort.py`): ONNX Runtime per-node kernel times (median over 40 runs), grouped by network region and operation type.
+10. **Statistics** (`fold_stats.py`, `paired_comparisons.py`): 5000 images split into 10 disjoint folds; per-fold mAP and paired differences with 95% t-intervals.
+11. **Studies:** layer sensitivity (`layer_sensitivity.py`, `sensitivity_qdq_check.py`), calibration-set size (`calib_size_study.py`), calibration method (`calib_method_study.py`).
 
-1. **Start model:** `yolov5nu.pt`, the ultralytics release of YOLOv5 nano (~5.6 MB).
-2. **Export:** to FP32 ONNX, 640x640, opset 13, simplified (10.8 MB).
-3. **Pre-process:** ONNX Runtime shape inference and graph clean-up.
-4. **Calibrate:** run 100 COCO images through the model to measure the value range at every layer.
-5. **Quantize:** static INT8 in QDQ format (weights int8 per-channel, activations uint8), which works with ONNX Runtime, TensorRT and OpenVINO.
-6. **Protect the head:** every node whose name starts with `/model.24/` (the Detect layer) is passed to `nodes_to_exclude`, so it stays FP32 and untouched.
-7. **Benchmark:** ultralytics validator on 1000 held-out COCO images at conf 0.001, IoU 0.7, plus 50 timed runs on the CPU.
-
-## The five variants
-
-Two knobs: **calibration** (how the 256 INT8 steps are spread over each layer's value range) and **exclusion** (which layers stay FP32).
-
-| Name | Calibration method | Kept in FP32 |
+## The designs
+| Name | Calibration | Kept in FP32 |
 |---|---|---|
-| v1 | Percentile (99.999) | Detect head (66 nodes) |
-| v2 | Min-Max | Detect head |
-| v3 | Percentile (99.99), clips more outliers | Detect head |
-| v4 | Percentile (99.999) | Detect head + the three neck output blocks (`/model.17/`, `/model.20/`, `/model.23/`) |
-| control | Percentile (99.999) | Nothing |
+| M1 | percentile | nothing |
+| M2 | percentile | neck + head |
+| M3 | percentile | head |
 
-### Idea and outcome
-
-| Name | Idea | Outcome (mAP50-95 lost) |
-|---|---|---|
-| v1 | Ignore the rarest 0.001% of values so steps go to typical values | -0.9%. Recommended |
-| v2 | Cover the most extreme value seen; one outlier makes steps coarser | -1.4%. Weakest, as expected |
-| v3 | Clip 10x more outliers for finer steps | -0.9%. Same as v1 |
-| v4 | Keep the layers feeding the head precise too | -1.0%. No gain, +1.1 MB |
-| control | Drastic case: quantize the head as well | -100% (score 0.000) |
-
-v1 to v4 land within ~0.5% of each other (noise). The one decision that matters is protecting the head.
-
-## Verified, not assumed
-
-For v1-v4, every one of the 19 Detect-layer convolutions (including the DFL layer) was checked against the original: weights are **FP32 and numerically identical**, with **zero Quantize/Dequantize nodes inside the head**. The control has 134 such nodes inside the head.
-
-The head still *receives* INT8-rounded features from the layers before it. That is where the ~1% accuracy loss comes from.
+Each is built per-channel and per-tensor, in ONNX and in TFLite.
 
 ## Data
+- **Calibration:** 500 images, seeded random sample of COCO train2017 (`prepare_data.py`).
+- **Test:** all 5000 COCO val2017 images with the official annotations (read from Day 1's download in place).
 
-- **Source:** COCO val2017 (5000 images), downloaded from images.cocodataset.org, with YOLO-format labels from the ultralytics assets release.
-- **Calibration:** the first 100 images (alphabetically by file name) from a 300-image pool.
-- **Test:** the **last 1000** images, with no overlap with calibration.
-
-## Gotchas we hit
+## Problems encountered (and fixes)
+See [VERIFICATION.md](VERIFICATION.md) for the checks that led to corrections. Environment and tooling problems:
 
 | Problem | Fix |
 |---|---|
-| A downloaded `yolov5n.onnx` was FP16, and the quantizer rejected it | `quantize_yolov5.py` converts FP16 to FP32 automatically |
-| Calibrating on 300 images ran out of RAM (ONNX Runtime stores every layer's output) | Use 100 images |
-| ONNX Runtime's `Entropy` calibration gave scales identical to Min-Max, so it isn't a real extra variant | Replaced by Percentile 99.99 |
-| `pip install opencv-python` upgraded NumPy to 2.x, which breaks torch 2.3.1 ("Numpy is not available") | `numpy==1.26.4` and `opencv-python<4.12` (see `requirements.txt`) |
-| Quantizing the head collapses accuracy to 0 | Keep it FP32. This is the whole point of the project. |
+| ONNX Runtime calibration ran out of RAM (it keeps every image's outputs) | Feed the calibrator 15 images at a time (it merges incrementally) |
+| Min-max calibration: this ONNX Runtime version's own memory cap discards data without recording it | Same chunking approach for the min-max calibrator |
+| Calibration was repeated for every variant | Ranges do not depend on exclusions or granularity: cached per (model, N, method) |
+| All-INT8 model scored 0.000 | Box output in pixels shares one INT8 scale with 0-1 scores; normalise boxes to 0-1 |
+| `onnx2tf` tried to download a sample file | Provide a local placeholder file in its working directory |
+| `onnx` 1.19 conflicts with TensorFlow 2.15's `ml_dtypes` | Pin `onnx==1.16.2`, `onnxruntime==1.18.1` in the TensorFlow environment |
+| A TFLite INT8 stage returned outputs in a different order | Match stage inputs to previous outputs by tensor shape |
+| A collapsed model has zero detections and `loadRes` fails | Treat an empty detections file as AP 0 |
 
-## Ideas for next steps (the more drastic options)
-
-1. **Mixed precision by sensitivity:** measure each layer's accuracy impact when quantized, protect only the worst ones. Most promising.
-2. **FP16 head:** 16-bit instead of 32-bit for the Detect layer (about 1.4 MB smaller).
-3. **Quantization-aware training:** fine-tune with quantization simulated; needs data and time.
-4. **Lower bit widths:** 4-bit backbone weights; smaller but likely less accurate.
-5. **Partial backbone quantization:** quantize only some stages to find where accuracy degrades.
-6. **Other hardware:** time on a GPU, phone or Raspberry Pi.
-7. **Better evidence:** calibrate on your own images and evaluate on all 5000 COCO val images.
+## Reproduce
+```bash
+pip install -r requirements.txt            # main environment; TensorFlow environment in Day 2/.venv (see requirements.txt)
+python scripts/prepare_data.py
+python scripts/make_normalized_model.py
+python scripts/build_onnx_variants.py                        # 6 ONNX variants
+python scripts/build_onnx_variants.py m1_all_int8_pc m1_all_int8_pt --norm
+python scripts/split_onnx.py
+bash scripts/convert_parts_onnx2tf.sh                        # ONNX parts -> SavedModels
+.venv/Scripts/python.exe scripts/build_tflite_variants.py
+bash scripts/run_onnx_benchmarks.sh                          # accuracy, ONNX
+bash scripts/run_tflite_benchmarks.sh                        # accuracy, TFLite
+bash scripts/run_remeasurements.sh                             # P/R/F1, quantized-layer check, memory x3, latency x9 rounds (idle machine)
+python scripts/aggregate_memory.py
+python scripts/fold_stats.py && python scripts/paired_comparisons.py
+python scripts/profile_ort.py
+python scripts/layer_sensitivity.py && python scripts/calib_size_study.py && python scripts/calib_method_study.py
+python scripts/make_summary.py && python scripts/make_charts.py && python scripts/make_report.py && python scripts/make_benchmark_summary.py
+```

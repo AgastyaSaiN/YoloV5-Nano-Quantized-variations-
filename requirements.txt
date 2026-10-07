@@ -1,9 +1,19 @@
+# Main environment (ONNX path, evaluation, charts, report)
 numpy==1.26.4
 opencv-python<4.12
 torch==2.3.1
 torchvision==0.18.1
-ultralytics==8.3.176
 onnx
-onnxslim
 onnxruntime==1.22.1
+pycocotools
+psutil
 matplotlib
+ipython            # needed by the vendored yolov5 export script
+scipy
+pandas
+pyyaml
+tqdm
+
+# TensorFlow venv (Day 2/.venv; TFLite conversion and TFLite evaluation) - pins that work together:
+#   numpy==1.26.4  tensorflow==2.15.1  tf_keras  onnx==1.16.2  onnxruntime==1.18.1  onnx2tf  onnx_graphsurgeon
+#   sng4onnx  onnxsim  ai_edge_litert  pycocotools  psutil  pillow  opencv-python-headless  protobuf<4.26

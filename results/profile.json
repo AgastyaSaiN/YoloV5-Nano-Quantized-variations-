@@ -1,0 +1,61 @@
+{
+  "FP32": {
+    "total_node_ms": 28.024999999999977,
+    "by_region_ms": {
+      "backbone": 10.516499999999999,
+      "other": 8.285499999999994,
+      "neck": 5.348999999999996,
+      "head": 3.8739999999999988
+    },
+    "by_op_ms": {
+      "conv": 12.595500000000003,
+      "other ops": 14.905999999999999,
+      "activation (sigmoid/mul)": 0.5235000000000001
+    }
+  },
+  "M1 per-channel": {
+    "total_node_ms": 26.777499999999993,
+    "by_region_ms": {
+      "other": 1.4225,
+      "backbone": 10.315499999999997,
+      "neck": 10.473999999999997,
+      "head": 4.5655
+    },
+    "by_op_ms": {
+      "quantize/dequantize": 1.1600000000000001,
+      "other ops": 12.245999999999999,
+      "conv": 8.044500000000003,
+      "activation (sigmoid/mul)": 5.326999999999996
+    }
+  },
+  "M2 per-channel": {
+    "total_node_ms": 24.12449999999999,
+    "by_region_ms": {
+      "other": 2.8854999999999995,
+      "backbone": 11.568000000000001,
+      "neck": 5.402999999999999,
+      "head": 4.267999999999999
+    },
+    "by_op_ms": {
+      "quantize/dequantize": 0.486,
+      "other ops": 8.439499999999997,
+      "conv": 11.325000000000003,
+      "activation (sigmoid/mul)": 3.8740000000000006
+    }
+  },
+  "M3 per-channel": {
+    "total_node_ms": 26.889000000000003,
+    "by_region_ms": {
+      "other": 1.3645,
+      "backbone": 10.636999999999997,
+      "neck": 11.078499999999995,
+      "head": 3.8090000000000006
+    },
+    "by_op_ms": {
+      "quantize/dequantize": 0.5305,
+      "other ops": 12.3405,
+      "conv": 8.591000000000001,
+      "activation (sigmoid/mul)": 5.426999999999998
+    }
+  }
+}

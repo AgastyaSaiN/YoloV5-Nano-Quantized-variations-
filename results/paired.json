@@ -1,0 +1,222 @@
+[
+  {
+    "comparison": "ONNX M1: per-channel minus per-tensor",
+    "A": "m1_all_int8_pc_norm",
+    "B": "m1_all_int8_pt_norm",
+    "diff": 0.010325396672628672,
+    "ci95": [
+      0.007815184745947749,
+      0.012835608599309595
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "ONNX M2: per-channel minus per-tensor",
+    "A": "m2_backbone_int8_pc",
+    "B": "m2_backbone_int8_pt",
+    "diff": 0.00793166101541179,
+    "ci95": [
+      0.005434802394594342,
+      0.010428519636229237
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "ONNX M3: per-channel minus per-tensor",
+    "A": "m3_backbone_neck_int8_pc",
+    "B": "m3_backbone_neck_int8_pt",
+    "diff": 0.011141512785347345,
+    "ci95": [
+      0.00854698038952515,
+      0.013736045181169542
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "ONNX pc: M2 (neck FP32) minus M3 (neck INT8)",
+    "A": "m2_backbone_int8_pc",
+    "B": "m3_backbone_neck_int8_pc",
+    "diff": 0.003000436500183401,
+    "ci95": [
+      0.0019964273998746935,
+      0.004004445600492109
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "ONNX pc: M3 (head FP32) minus M1 (head INT8)",
+    "A": "m3_backbone_neck_int8_pc",
+    "B": "m1_all_int8_pc_norm",
+    "diff": 0.018478737412822938,
+    "ci95": [
+      0.016831819791182395,
+      0.02012565503446348
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "ONNX pt: M2 (neck FP32) minus M3 (neck INT8)",
+    "A": "m2_backbone_int8_pt",
+    "B": "m3_backbone_neck_int8_pt",
+    "diff": 0.006210288270118958,
+    "ci95": [
+      0.00431319114658879,
+      0.008107385393649125
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "ONNX pt: M3 (head FP32) minus M1 (head INT8)",
+    "A": "m3_backbone_neck_int8_pt",
+    "B": "m1_all_int8_pt_norm",
+    "diff": 0.017662621300104264,
+    "ci95": [
+      0.016515415803312002,
+      0.018809826796896526
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "TFLite M1: per-channel minus per-tensor",
+    "A": "tflite_m1_all_int8_pc",
+    "B": "tflite_m1_all_int8_pt",
+    "diff": 0.013196573987736243,
+    "ci95": [
+      0.010090531507549103,
+      0.016302616467923383
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "TFLite M2: per-channel minus per-tensor",
+    "A": "tflite_m2_backbone_int8_pc",
+    "B": "tflite_m2_backbone_int8_pt",
+    "diff": 0.00900502409436868,
+    "ci95": [
+      0.006293700461839562,
+      0.011716347726897797
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "TFLite M3: per-channel minus per-tensor",
+    "A": "tflite_m3_backbone_neck_int8_pc",
+    "B": "tflite_m3_backbone_neck_int8_pt",
+    "diff": 0.012871741855902497,
+    "ci95": [
+      0.010099600603088028,
+      0.015643883108716967
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "TFLite pc: M2 (neck FP32) minus M3 (neck INT8)",
+    "A": "tflite_m2_backbone_int8_pc",
+    "B": "tflite_m3_backbone_neck_int8_pc",
+    "diff": 0.004581246365548397,
+    "ci95": [
+      0.0033715325277447043,
+      0.00579096020335209
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "TFLite pc: M3 (head FP32) minus M1 (head INT8)",
+    "A": "tflite_m3_backbone_neck_int8_pc",
+    "B": "tflite_m1_all_int8_pc",
+    "diff": 0.018340659548289305,
+    "ci95": [
+      0.016583126401161444,
+      0.020098192695417166
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "TFLite pt: M2 (neck FP32) minus M3 (neck INT8)",
+    "A": "tflite_m2_backbone_int8_pt",
+    "B": "tflite_m3_backbone_neck_int8_pt",
+    "diff": 0.008447964127082213,
+    "ci95": [
+      0.0072145677556775135,
+      0.009681360498486913
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "TFLite pt: M3 (head FP32) minus M1 (head INT8)",
+    "A": "tflite_m3_backbone_neck_int8_pt",
+    "B": "tflite_m1_all_int8_pt",
+    "diff": 0.018665491680123054,
+    "ci95": [
+      0.01683957852886396,
+      0.02049140483138215
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "M1 pc: ONNX minus TFLite",
+    "A": "m1_all_int8_pc_norm",
+    "B": "tflite_m1_all_int8_pc",
+    "diff": 0.005664262805911563,
+    "ci95": [
+      0.0036694582160593787,
+      0.007659067395763747
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "M1 pt: ONNX minus TFLite",
+    "A": "m1_all_int8_pt_norm",
+    "B": "tflite_m1_all_int8_pt",
+    "diff": 0.008535440121019134,
+    "ci95": [
+      0.006581015332248567,
+      0.0104898649097897
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "M2 pc: ONNX minus TFLite",
+    "A": "m2_backbone_int8_pc",
+    "B": "tflite_m2_backbone_int8_pc",
+    "diff": 0.004221530805080198,
+    "ci95": [
+      0.0023239061465366393,
+      0.006119155463623757
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "M2 pt: ONNX minus TFLite",
+    "A": "m2_backbone_int8_pt",
+    "B": "tflite_m2_backbone_int8_pt",
+    "diff": 0.0052948938840370885,
+    "ci95": [
+      0.0027588690461613392,
+      0.007830918721912838
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "M3 pc: ONNX minus TFLite",
+    "A": "m3_backbone_neck_int8_pc",
+    "B": "tflite_m3_backbone_neck_int8_pc",
+    "diff": 0.005802340670445194,
+    "ci95": [
+      0.004186454196776332,
+      0.007418227144114055
+    ],
+    "significant": true
+  },
+  {
+    "comparison": "M3 pt: ONNX minus TFLite",
+    "A": "m3_backbone_neck_int8_pt",
+    "B": "tflite_m3_backbone_neck_int8_pt",
+    "diff": 0.007532569741000345,
+    "ci95": [
+      0.005453464277912829,
+      0.009611675204087861
+    ],
+    "significant": true
+  }
+]

@@ -1,81 +1,146 @@
-"""Turn results/benchmark_results.json into three beginner-friendly charts in results/charts/."""
+"""Day 2 charts (white background, report style, no titles baked in; captions live in report.html).
+Reads results/summary.json, sensitivity.json, calib_size.json -> results/charts/*.png"""
 import json
-import sys
 from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
 
-ROOT = Path(__file__).resolve().parent.parent
-R = json.loads((ROOT / "results" / "benchmark_results.json").read_text())
-NOTITLE = "--no-titles" in sys.argv   # clean versions for report.html (captions live in the HTML)
-OUT = ROOT / "results" / ("charts_for_report" if NOTITLE else "charts")
-OUT.mkdir(parents=True, exist_ok=True)
+R = Path(__file__).resolve().parent.parent / "results"
+OUT = R / "charts"
+OUT.mkdir(exist_ok=True)
+S = {(r["format"], r["model"]): r for r in json.loads((R / "summary.json").read_text())}
+INK, GRID, GRAY = "#1a1a1a", "#e6e6e6", "#8a8f98"
+C = {("ONNX", "pc"): "#1f4e9e", ("ONNX", "pt"): "#8fb3e8", ("TFLite", "pc"): "#1b7f5c", ("TFLite", "pt"): "#8fd4b8"}
+plt.rcParams.update({"font.size": 11, "font.family": "DejaVu Sans", "axes.edgecolor": "#bbbbbb", "text.color": INK,
+                     "axes.labelcolor": INK, "xtick.color": INK, "ytick.color": INK, "axes.spines.top": False,
+                     "axes.spines.right": False, "figure.facecolor": "white", "axes.facecolor": "white"})
 
-LABELS = {
-    "fp32_reference": "Original\n(FP32)",
-    "v1_percentile_head": "v1\nPercentile",
-    "v3_percentile9999_head": "v3\nPercentile\n99.99",
-    "v4_percentile_head_neck": "v4\n+ extra FP32\nlayers",
-    "v2_minmax_head": "v2\nMin-Max",
-    "ctrl_percentile_all": "Control\n(head also INT8)",
-}
-ORDER = list(LABELS)
-GRAY, BLUE, RED, INK, GRID = "#8a8f98", "#2f6fdb", "#d64545", "#1f2430", "#e6e8ec"
-color = lambda k: GRAY if k == "fp32_reference" else RED if k.startswith("ctrl") else BLUE
-
-plt.rcParams.update({"font.size": 11, "axes.edgecolor": GRID, "axes.labelcolor": INK, "text.color": INK,
-                     "xtick.color": INK, "ytick.color": INK, "axes.spines.top": False, "axes.spines.right": False})
-
-def set_title(ax, text, **kw):
-    if not NOTITLE:
-        ax.set_title(text, **kw)
+# model keys per design (ONNX M1 uses the 0-1 box version; the pixel-scale one is shown separately)
+D = [("M1  all INT8\n(head INT8 too)", "m1_all_int8", "_norm"), ("M2  backbone INT8\nneck + head FP32", "m2_backbone_int8", ""),
+     ("M3  backbone + neck INT8\nhead FP32", "m3_backbone_neck_int8", "")]
+key = lambda fmt, base, g, suf: (fmt, (f"{base}_{g}{suf}" if fmt == "ONNX" else f"tflite_{base}_{g}"))
+base_map = S[("ONNX", "m0_fp32")]["mAP50-95"]
 
 
-def style(ax):
-    ax.yaxis.grid(True, color=GRID); ax.set_axisbelow(True)
+def style(ax, axis="y"):
+    (ax.yaxis if axis == "y" else ax.xaxis).grid(True, color=GRID)
+    ax.set_axisbelow(True)
 
-# 1) Accuracy
+
+# 1 ---------------------------------------------------------------- accuracy by design
 fig, ax = plt.subplots(figsize=(10, 5)); style(ax)
-vals = [R[k]["mAP50-95"] for k in ORDER]
-bars = ax.bar([LABELS[k] for k in ORDER], vals, color=[color(k) for k in ORDER], width=0.62)
-for b, v in zip(bars, vals):
-    ax.text(b.get_x() + b.get_width() / 2, v + 0.006, f"{v:.3f}", ha="center", fontweight="bold")
-ax.annotate("Quantizing the head too\ndestroys the detections", xy=(5, 0.025), xytext=(5, 0.13), ha="center",
-            color=RED, fontweight="bold", arrowprops=dict(arrowstyle="->", color=RED))
-ax.set_ylabel("Accuracy score (mAP50-95, higher = better)"); ax.set_ylim(0, 0.40)
-set_title(ax, "1. Accuracy: all head-protected versions stay within ~1% of the original", loc="left", fontweight="bold")
+w = 0.2
+for j, (fmt, g) in enumerate([("ONNX", "pc"), ("ONNX", "pt"), ("TFLite", "pc"), ("TFLite", "pt")]):
+    vals = [S[key(fmt, b, g, s)]["mAP50-95"] for _, b, s in D]
+    bars = ax.bar(np.arange(3) + (j - 1.5) * w, vals, w, color=C[(fmt, g)], label=f"{fmt}, {'per-channel' if g == 'pc' else 'per-tensor'}")
+    for b_, v in zip(bars, vals):
+        ax.text(b_.get_x() + w / 2, v + 0.002, f"{v:.3f}", ha="center", fontsize=8.5)
+ax.axhline(base_map, color=GRAY, ls="--", lw=1.2)
+ax.text(2.45, base_map - 0.0035, f"FP32 baseline {base_map:.3f}", color=GRAY, ha="right", fontsize=10)
+ax.set_xticks(range(3)); ax.set_xticklabels([d[0] for d in D]); ax.set_ylim(0.20, 0.315)
+ax.set_ylabel("mAP50-95 (COCO val2017, 5000 images)"); ax.legend(frameon=False, ncol=2, loc="upper left")
 fig.tight_layout(); fig.savefig(OUT / "1_accuracy.png", dpi=160); plt.close(fig)
 
-# 2) Size and speed relative to the original (control excluded: it is broken)
-keys = [k for k in ORDER if not k.startswith("ctrl")]
-base = R["fp32_reference"]
-fig, ax = plt.subplots(figsize=(10, 5)); style(ax)
-x = range(len(keys)); w = 0.38
-size = [R[k]["size_mb"] / base["size_mb"] * 100 for k in keys]
-lat = [R[k]["latency_ms_median"] / base["latency_ms_median"] * 100 for k in keys]
-b1 = ax.bar([i - w / 2 for i in x], size, w, color="#2f6fdb", label="File size")
-b2 = ax.bar([i + w / 2 for i in x], lat, w, color="#59b38a", label="Time per image")
-for bars_ in (b1, b2):
-    for b in bars_:
-        ax.text(b.get_x() + b.get_width() / 2, b.get_height() + 1.5, f"{b.get_height():.0f}%", ha="center", fontsize=10)
-ax.axhline(100, color=GRAY, ls="--", lw=1); ax.text(len(keys) - 0.5, 102, "original = 100%", color=GRAY, ha="right")
-ax.set_xticks(list(x)); ax.set_xticklabels([LABELS[k] for k in keys]); ax.set_ylim(0, 120)
-ax.set_ylabel("% of the original (lower = better)"); ax.legend(frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.16), ncol=2)
-set_title(ax, "2. Size and speed: about half the size, 10-20% faster", loc="left", fontweight="bold")
-fig.tight_layout(); fig.savefig(OUT / "2_size_and_speed.png", dpi=160); plt.close(fig)
+# 2 ---------------------------------------------------------------- size vs accuracy
+fig, ax = plt.subplots(figsize=(10, 5.4)); style(ax); style(ax, "x")
+ax.scatter([S[("ONNX", "m0_fp32")]["size_mb"]], [base_map], s=110, color=GRAY, zorder=3)
+ax.annotate("FP32", (S[("ONNX", "m0_fp32")]["size_mb"], base_map), textcoords="offset points", xytext=(-8, 8), ha="right")
+for fmt in ("ONNX", "TFLite"):
+    for lab, b, s in D:
+        for g in ("pc", "pt"):
+            r = S[key(fmt, b, g, s)]
+            ax.scatter(r["size_mb"], r["mAP50-95"], s=85, color=C[(fmt, g)], edgecolor="white", zorder=3)
+            ax.annotate(lab.split("  ")[0] + ("" if fmt == "ONNX" else "t"), (r["size_mb"], r["mAP50-95"]),
+                        textcoords="offset points", xytext=(6, 4 if g == "pc" else -11), fontsize=8.5, color=C[(fmt, g)])
+ax.set_xlabel("Model size (MB, all pipeline stages)"); ax.set_ylabel("mAP50-95")
+ax.set_xlim(8.4, 1.6)
+from matplotlib.lines import Line2D
+ax.legend(handles=[Line2D([], [], marker="o", ls="", color=C[k], label=f"{k[0]} {'per-channel' if k[1] == 'pc' else 'per-tensor'}") for k in C],
+          frameon=False, loc="lower left")
+ax.text(0.99, 0.97, "up and to the right = smaller and more accurate\n(\"t\" suffix = TFLite)", transform=ax.transAxes, ha="right", va="top", fontsize=9, color=GRAY)
+fig.tight_layout(); fig.savefig(OUT / "2_size_vs_accuracy.png", dpi=160); plt.close(fig)
 
-# 3) Accuracy lost, zoomed
-keys = [k for k in ORDER if k not in ("fp32_reference", "ctrl_percentile_all")]
-drops = [(base["mAP50-95"] - R[k]["mAP50-95"]) / base["mAP50-95"] * 100 for k in keys]
-fig, ax = plt.subplots(figsize=(10, 4.6)); style(ax)
-bars = ax.bar([LABELS[k] for k in keys], drops, color=BLUE, width=0.55)
-for b, v in zip(bars, drops):
-    ax.text(b.get_x() + b.get_width() / 2, v + 0.03, f"-{v:.1f}%", ha="center", fontweight="bold")
-ax.axhspan(0, 0.5, color="#f3f4f6", zorder=0)
-ax.text(-0.45, 1.65, "Grey band: differences below ~0.5% are within noise (only 1000 test images)", ha="left", color=GRAY, fontsize=9.5)
-ax.set_ylabel("Accuracy lost vs original (%, lower = better)"); ax.set_ylim(0, 1.8)
-set_title(ax, "3. Zoom: accuracy lost by each protected version", loc="left", fontweight="bold")
-fig.tight_layout(); fig.savefig(OUT / "3_accuracy_lost_zoomed.png", dpi=160); plt.close(fig)
-print("charts written to", OUT)
+# 3 ---------------------------------------------------------------- latency + memory
+fig, (a1, a2) = plt.subplots(1, 2, figsize=(12, 5)); style(a1); style(a2)
+names, lat, p95, mem, cols = [], [], [], [], []
+for fmt in ("ONNX", "TFLite"):
+    base = S[(fmt, "m0_fp32" if fmt == "ONNX" else "tflite_m0_fp32")]
+    items = [("FP32", base, GRAY)]
+    for lab, b, s in D:
+        for g in ("pc", "pt"):
+            items.append((f"{lab.split('  ')[0]} {g}", S[key(fmt, b, g, s)], C[(fmt, g)]))
+    for n, r, c in items:
+        names.append(f"{n}\n{fmt}"); lat.append(r["latency_ms_median"]); p95.append(r["latency_ms_p95"])
+        mem.append(r["mem_peak_added_mb"]); cols.append(c)
+x = np.arange(len(names))
+a1.bar(x, lat, color=cols, width=0.7); a1.errorbar(x, lat, yerr=[np.zeros(len(x)), np.array(p95) - np.array(lat)], fmt="none", ecolor=INK, capsize=2, lw=0.9)
+a1.set_xticks(x); a1.set_xticklabels(names, fontsize=6.5, rotation=90); a1.set_ylabel("ms per image (median, whisker = p95)")
+a2.bar(x, mem, color=cols, width=0.7); a2.set_xticks(x); a2.set_xticklabels(names, fontsize=6.5, rotation=90)
+a2.set_ylabel("memory added during inference (MB)")
+fig.tight_layout(); fig.savefig(OUT / "3_latency_memory.png", dpi=160); plt.close(fig)
+
+# 4 ---------------------------------------------------------------- precision / recall / F1
+fig, ax = plt.subplots(figsize=(10, 4.8)); style(ax)
+rows = [("FP32", S[("ONNX", "m0_fp32")])]
+for lab, b, s in D:
+    rows.append((lab.split("  ")[0] + " pc", S[key("ONNX", b, "pc", s)]))
+x = np.arange(len(rows)); w = 0.26
+for j, (m, col) in enumerate([("precision@0.25", "#1f4e9e"), ("recall@0.25", "#d98c1f"), ("F1@0.25", "#1b7f5c")]):
+    v = [r[m] for _, r in rows]
+    bars = ax.bar(x + (j - 1) * w, v, w, color=col, label=m.split("@")[0].capitalize() if "F1" not in m else "F1")
+    for b_, vv in zip(bars, v):
+        ax.text(b_.get_x() + w / 2, vv + 0.005, f"{vv:.2f}", ha="center", fontsize=8.5)
+ax.set_xticks(x); ax.set_xticklabels([n for n, _ in rows]); ax.set_ylim(0, 0.8); ax.legend(frameon=False, ncol=3)
+ax.set_ylabel("score at confidence threshold 0.25 (ONNX per-channel)")
+fig.tight_layout(); fig.savefig(OUT / "4_precision_recall_f1.png", dpi=160); plt.close(fig)
+
+# 5 ---------------------------------------------------------------- pixel vs normalised control
+fig, ax = plt.subplots(figsize=(7, 4.4)); style(ax)
+labs = ["per-channel", "per-tensor"]
+pix = [S[("ONNX", "m1_all_int8_pc")]["mAP50-95"], S[("ONNX", "m1_all_int8_pt")]["mAP50-95"]]
+nrm = [S[("ONNX", "m1_all_int8_pc_norm")]["mAP50-95"], S[("ONNX", "m1_all_int8_pt_norm")]["mAP50-95"]]
+for j, (v, lab, col) in enumerate([(pix, "boxes in pixels (0-640)", "#c0392b"), (nrm, "boxes normalised (0-1)", "#1f4e9e")]):
+    bars = ax.bar(np.arange(2) + (j - 0.5) * 0.35, v, 0.35, color=col, label=lab)
+    for b_, vv in zip(bars, v):
+        ax.text(b_.get_x() + 0.175, vv + 0.004, f"{vv:.3f}", ha="center", fontsize=10)
+ax.axhline(base_map, color=GRAY, ls="--", lw=1.2); ax.text(1.5, base_map + 0.004, "FP32 baseline", color=GRAY, ha="right", fontsize=9)
+ax.set_xticks(range(2)); ax.set_xticklabels(labs); ax.set_ylabel("mAP50-95 (all-INT8 ONNX model)"); ax.set_ylim(0, 0.32)
+ax.legend(frameon=False, loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.12))
+fig.tight_layout(); fig.savefig(OUT / "5_box_scale_fix.png", dpi=160); plt.close(fig)
+
+# 6 ---------------------------------------------------------------- layer sensitivity
+sens = json.loads((R / "sensitivity.json").read_text()); b = sens["fp32"]
+lay = [(int(k[1:]), (b - v) / b * 100) for k, v in sens.items() if k != "fp32"]
+lay.sort()
+fig, ax = plt.subplots(figsize=(11, 4.8)); style(ax)
+cols = ["#1f4e9e" if i < 10 else "#d98c1f" if i < 24 else "#c0392b" for i, _ in lay]
+qd = json.loads((R / "sensitivity_qdq.json").read_text())
+bars_ = ax.bar([i for i, _ in lay], [v for _, v in lay], color=cols, width=0.75)
+for (i, _), b_ in zip(lay, bars_):
+    if qd[f"L{i:02d}"] == 0:                       # layer got no Q/DQ when isolated: not a real measurement
+        b_.set_facecolor("white"); b_.set_edgecolor("#999999"); b_.set_hatch("///")
+        ax.text(i, 0.25, "not quantized", ha="center", fontsize=7, color="#777777", rotation=90, va="bottom")
+ax.axhspan(-0.3, 0.3, color="#f1f1f1", zorder=0)
+ax.set_xticks(range(25)); ax.set_xlabel("YOLOv5 layer index"); ax.set_ylabel("accuracy lost when ONLY this layer is INT8 (%)")
+ax.legend(handles=[plt.Rectangle((0, 0), 1, 1, color=c) for c in ("#1f4e9e", "#d98c1f", "#c0392b")], labels=["backbone (0-9)", "neck / PANet (10-23)", "Detect head (24)"], frameon=False, loc="upper left")
+ax.annotate("Detect head", (24, lay[-1][1]), xytext=(21, lay[-1][1] - 0.4), arrowprops=dict(arrowstyle="->", color="#c0392b"), color="#c0392b")
+fig.tight_layout(); fig.savefig(OUT / "6_layer_sensitivity.png", dpi=160); plt.close(fig)
+
+# 7 ---------------------------------------------------------------- calibration size
+cs_path = R / "calib_size.json"
+if cs_path.exists():
+    cs = json.loads(cs_path.read_text())
+    cs["500"] = {"mAP50-95": S[("ONNX", "m3_backbone_neck_int8_pc")]["mAP50-95"]}
+    ns = sorted(int(k) for k in cs)
+    fig, ax = plt.subplots(figsize=(7.5, 4.4)); style(ax)
+    ax.plot(ns, [cs[str(n)]["mAP50-95"] for n in ns], marker="o", color="#1f4e9e", lw=2)
+    ax.axhline(base_map, color=GRAY, ls="--", lw=1.2); ax.text(ns[-1], base_map + 0.0006, "FP32", color=GRAY, ha="right")
+    for n in ns:
+        ax.text(n, cs[str(n)]["mAP50-95"] - 0.0022, f"{cs[str(n)]['mAP50-95']:.4f}", ha="center", fontsize=9)
+    ax.set_xscale("log"); ax.set_xticks(ns); ax.set_xticklabels(ns); ax.minorticks_off()
+    ax.set_xlabel("calibration images (train2017)"); ax.set_ylabel("mAP50-95 (M3 per-channel, ONNX)")
+    fig.tight_layout(); fig.savefig(OUT / "7_calibration_size.png", dpi=160); plt.close(fig)
+print("charts:", sorted(p.name for p in OUT.glob("*.png")))

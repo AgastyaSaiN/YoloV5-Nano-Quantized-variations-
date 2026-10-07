@@ -1,0 +1,9 @@
+{
+  "design": "m2_backbone_int8_pc",
+  "stages": [
+    "stage1.tflite",
+    "stage2.tflite"
+  ],
+  "note": "backbone INT8 | neck+head FP32",
+  "size_mb": 4.87998
+}

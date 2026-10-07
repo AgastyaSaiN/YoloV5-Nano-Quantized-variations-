@@ -1,0 +1,128 @@
+{
+  "m0_fp32": {
+    "baseline_mb": 56.356864,
+    "load_mb": 18.325503999999995,
+    "peak_mb": 62.205951999999996,
+    "steady_mb": 62.205951999999996,
+    "peak_min_mb": 61.231104,
+    "peak_max_mb": 63.021056,
+    "runs": 3
+  },
+  "m1_all_int8_pc_norm": {
+    "baseline_mb": 56.303616,
+    "load_mb": 16.179199999999994,
+    "peak_mb": 51.798016000000004,
+    "steady_mb": 51.798016000000004,
+    "peak_min_mb": 51.437568,
+    "peak_max_mb": 51.8144,
+    "runs": 3
+  },
+  "m1_all_int8_pt_norm": {
+    "baseline_mb": 56.303616,
+    "load_mb": 15.798272000000004,
+    "peak_mb": 51.4048,
+    "steady_mb": 51.4048,
+    "peak_min_mb": 51.068928,
+    "peak_max_mb": 51.60960000000001,
+    "runs": 3
+  },
+  "m2_backbone_int8_pc": {
+    "baseline_mb": 56.295424,
+    "load_mb": 17.289215999999996,
+    "peak_mb": 66.78528,
+    "steady_mb": 66.78528,
+    "peak_min_mb": 66.1504,
+    "peak_max_mb": 67.16620800000001,
+    "runs": 3
+  },
+  "m2_backbone_int8_pt": {
+    "baseline_mb": 56.365056,
+    "load_mb": 16.125952000000005,
+    "peak_mb": 66.17907199999999,
+    "steady_mb": 66.17907199999999,
+    "peak_min_mb": 65.66297600000001,
+    "peak_max_mb": 67.37100799999999,
+    "runs": 3
+  },
+  "m3_backbone_neck_int8_pc": {
+    "baseline_mb": 56.254464,
+    "load_mb": 17.031168,
+    "peak_mb": 66.42483200000001,
+    "steady_mb": 66.42483200000001,
+    "peak_min_mb": 66.28147200000001,
+    "peak_max_mb": 66.879488,
+    "runs": 3
+  },
+  "m3_backbone_neck_int8_pt": {
+    "baseline_mb": 56.332288,
+    "load_mb": 16.60928,
+    "peak_mb": 66.23641599999999,
+    "steady_mb": 66.23641599999999,
+    "peak_min_mb": 66.052096,
+    "peak_max_mb": 66.330624,
+    "runs": 3
+  },
+  "tflite_m0_fp32": {
+    "baseline_mb": 261.144576,
+    "load_mb": 19.415040000000033,
+    "peak_mb": 108.507136,
+    "steady_mb": 94.45785600000005,
+    "peak_min_mb": 105.775104,
+    "peak_max_mb": 113.40185600000001,
+    "runs": 3
+  },
+  "tflite_m1_all_int8_pc": {
+    "baseline_mb": 261.799936,
+    "load_mb": 8.101887999999974,
+    "peak_mb": 69.48044799999997,
+    "steady_mb": 64.56115199999999,
+    "peak_min_mb": 69.38623999999999,
+    "peak_max_mb": 69.632,
+    "runs": 3
+  },
+  "tflite_m1_all_int8_pt": {
+    "baseline_mb": 261.849088,
+    "load_mb": 8.06092799999999,
+    "peak_mb": 69.36985599999997,
+    "steady_mb": 64.45056,
+    "peak_min_mb": 69.35347200000001,
+    "peak_max_mb": 69.455872,
+    "runs": 3
+  },
+  "tflite_m2_backbone_int8_pc": {
+    "baseline_mb": 261.361664,
+    "load_mb": 14.045184000000006,
+    "peak_mb": 95.40812799999998,
+    "steady_mb": 90.488832,
+    "peak_min_mb": 94.85516799999999,
+    "peak_max_mb": 95.543296,
+    "runs": 3
+  },
+  "tflite_m2_backbone_int8_pt": {
+    "baseline_mb": 260.878336,
+    "load_mb": 14.159872000000007,
+    "peak_mb": 95.52281600000003,
+    "steady_mb": 90.60352,
+    "peak_min_mb": 95.45728000000003,
+    "peak_max_mb": 95.69894400000004,
+    "runs": 3
+  },
+  "tflite_m3_backbone_neck_int8_pc": {
+    "baseline_mb": 261.230592,
+    "load_mb": 9.949184000000002,
+    "peak_mb": 96.48947199999998,
+    "steady_mb": 91.570176,
+    "peak_min_mb": 96.40755200000001,
+    "peak_max_mb": 96.75571199999996,
+    "runs": 3
+  },
+  "tflite_m3_backbone_neck_int8_pt": {
+    "baseline_mb": 261.312512,
+    "load_mb": 9.42899200000005,
+    "peak_mb": 95.95699200000001,
+    "steady_mb": 91.03769600000004,
+    "peak_min_mb": 95.772672,
+    "peak_max_mb": 96.01023999999995,
+    "runs": 3
+  }
+}
