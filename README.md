@@ -2,6 +2,7 @@
 
 - **[results/benchmark_summary.html](results/benchmark_summary.html)**: the short summary (now also with the measurement protocol, OpenVINO and ReLU-hybrid results, and the speed-versus-accuracy chart). What was built, then the six benchmark metrics one by one (mAP@0.5, mAP@0.5:0.95, binary size and compression ratio, time per image, precision/recall/F1, memory), each with a chart and a table.
 - **[results/report.html](results/report.html)**: the full report with the extra studies (layer sensitivity, calibration, statistics, profile, method).
+- **[docs/PROGRESS.md](docs/PROGRESS.md)**: the results stage by stage: what was done, why, and what came out.
 - **[docs/VERIFICATION.md](docs/VERIFICATION.md)**: the checks made on the results, and the corrections that followed.
 
 ## Result in brief
