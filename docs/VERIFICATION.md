@@ -25,3 +25,13 @@ Every suspicious pattern in the results was tested before the reports were final
 - Layer sensitivity uses the first 1000 validation images and one layer at a time.
 - Latency is noisy (rounds of the same model differ by up to about 27%); small gaps between INT8 variants should not be interpreted.
 - Quantization-aware training was not attempted: it needs the COCO training set (about 18 GB) and substantial training time. The measured accuracy loss (1.6 to 9%) leaves that as a possible future step.
+
+
+## Second round of corrections
+
+- **Pinned cores.** Unpinned threads landed on hyper-threaded siblings and inflated the FP32 baseline by about 50%. All timings now use four distinct physical cores.
+- **Measurement during training.** A latency run taken while training was running gave an FP32 baseline of 63 ms (about 25 ms when idle); it was discarded. Final timings were taken on an idle machine on AC power.
+- **Calibration cache bug.** A cache of min-max ranges froze the ranges after the first chunk of images; the cache was removed for min-max and the ONNX-versus-TFLite comparison was redone (differences now -0.18 to +0.10 mAP points).
+- **OpenVINO/NNCF.** Quantizing with NNCF gave no speed advantage over ONNX Runtime QDQ for the SiLU models beyond the runtime itself.
+- **Hybrid models.** Training is resumable; after every run all Detect-head parameters were compared with the original and are identical.
+- **Hardware resets.** The laptop reset unexpectedly several times during long jobs (Windows event 41, no crash dump); jobs were made resumable and short measurements repeated.

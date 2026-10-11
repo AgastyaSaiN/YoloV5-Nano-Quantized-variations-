@@ -1,6 +1,6 @@
 # Day 2: INT8 quantization of YOLOv5n for an embedded NPU target
 
-- **[results/benchmark_summary.html](results/benchmark_summary.html)**: the short summary. What was built, then the six benchmark metrics one by one (mAP@0.5, mAP@0.5:0.95, binary size and compression ratio, time per image, precision/recall/F1, memory), each with a chart and a table.
+- **[results/benchmark_summary.html](results/benchmark_summary.html)**: the short summary (now also with the measurement protocol, OpenVINO and ReLU-hybrid results, and the speed-versus-accuracy chart). What was built, then the six benchmark metrics one by one (mAP@0.5, mAP@0.5:0.95, binary size and compression ratio, time per image, precision/recall/F1, memory), each with a chart and a table.
 - **[results/report.html](results/report.html)**: the full report with the extra studies (layer sensitivity, calibration, statistics, profile, method).
 - **[docs/VERIFICATION.md](docs/VERIFICATION.md)**: the checks made on the results, and the corrections that followed.
 
@@ -19,8 +19,8 @@ FP32 baseline: **mAP50-95 0.281** on all 5000 COCO val2017 images (matches the p
 - **The Detect head is the sensitive layer:** quantizing it alone costs 7.0% accuracy; every other single layer that was actually quantized costs 1.0% or less.
 - **M1 only works with box output normalised to 0-1.** With pixel-scale boxes it scores 0.000 (confidence scores round to zero).
 - **Calibration size barely matters** (50 to 500 images: 0.2721 to 0.2735). **Calibration method does:** percentile calibration scores about 0.6 mAP points above min-max, which accounts for the ONNX-versus-TFLite difference.
-- **Speed (desktop CPU, 9 interleaved rounds):** INT8 ONNX models take 31 to 41% less time per image than FP32; all-INT8 TFLite models about 20% less; TFLite designs that keep an FP32 stage 4 to 10% less. The INT8 gain is limited by the unfused SiLU activation and the INT8 neck (see the report).
-- **Memory (added to the process during inference):** all-INT8 models use about 17% (ONNX) and 36% (TFLite) less than FP32; designs that mix INT8 and FP32 use 6 to 7% more (ONNX) or 11 to 12% less (TFLite).
+- **Speed (desktop CPU, 4 pinned cores, 9 interleaved rounds):** INT8 ONNX models take 11 to 25% less time per image than FP32 (M2 fastest); all-INT8 TFLite models about 22% less; TFLite designs that keep an FP32 stage 4 to 11% less. The INT8 gain is limited by the unfused SiLU activation and the INT8 neck (see the report).
+- **Memory (added to the process during inference):** all-INT8 models use about 16% (ONNX) and 37% (TFLite) less than FP32; designs that mix INT8 and FP32 use 6 to 7% more (ONNX) or about 14% less (TFLite).
 - None of the speed or memory figures is an NPU measurement.
 
 ## Layout
@@ -71,3 +71,16 @@ Day 2 reads Day 1's `val2017.zip` in place (about 780 MB) rather than copying it
 - Latency is noisy (the same model varies by up to about 27% between rounds); gaps between INT8 variants are not meaningful.
 - Layer sensitivity uses the first 1000 val images and one layer at a time; upsample layers could not be quantized in isolation.
 - Quantization-aware training was not attempted.
+
+## Latest speed results (idle machine, 4 pinned cores, batch 1, 20 warm-up + 100 timed calls, 9 interleaved rounds)
+
+| Model | Runtime | Retained accuracy | Speed-up vs FP32 of same runtime |
+|---|---|---|---|
+| M2 INT8 (SiLU) | ONNX Runtime | 98.4% | 1.33x |
+| M3 INT8 (SiLU, NNCF) | OpenVINO | 97.7% | 1.41x |
+| Hybrid-55 v2, M3 (12 activations ReLU) | OpenVINO | 92.5% | 1.71x |
+| Hybrid-55 v2, M1 all INT8 | OpenVINO | 91.9% | 1.82x |
+| Hybrid-80, M3 (29 activations ReLU) | OpenVINO | 88.6% | 1.88x |
+| Hybrid-80, M1 all INT8 | OpenVINO | 88.4% | 2.02x |
+
+The Detect head is unchanged in every model. 2x was reached only by the all-INT8 Hybrid-80 model, at about 88% of the FP32 accuracy; 2x at 95% or more accuracy was not reached; 4x is not reachable on this CPU. Details: [results/report.html](results/report.html).

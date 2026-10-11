@@ -21,10 +21,28 @@ from onnx.utils import extract_model
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import DAY2, ValImages, preprocess  # noqa: E402
 
-SRC = DAY2 / "models" / "fp32" / "yolov5n_norm.onnx"
-OUT = DAY2 / "models" / "tflite" / "_work" / "onnx_parts"
-B = ["/model.4/cv3/act/Mul_output_0", "/model.6/cv3/act/Mul_output_0", "/model.9/cv2/act/Mul_output_0"]
-N = ["/model.17/cv3/act/Mul_output_0", "/model.20/cv3/act/Mul_output_0", "/model.23/cv3/act/Mul_output_0"]
+import argparse
+ap = argparse.ArgumentParser()
+ap.add_argument("--src", default=str(DAY2 / "models" / "fp32" / "yolov5n_norm.onnx"))
+ap.add_argument("--tag", default="", help="work sub-folder tag, e.g. relu (default: the SiLU model)")
+args = ap.parse_args()
+SRC = Path(args.src)
+WORK = DAY2 / "models" / "tflite" / "_work" / (args.tag if args.tag else "")
+OUT = WORK / "onnx_parts"
+
+
+def layer_output(model, layer):
+    """Output tensor of the last node (in graph order) that belongs to layer N."""
+    last = None
+    for n in model.graph.node:
+        if n.name.startswith(f"/model.{layer}/"):
+            last = n
+    return last.output[0]
+
+
+_m = onnx.load(str(SRC))
+B = [layer_output(_m, i) for i in (4, 6, 9)]           # backbone -> neck
+N = [layer_output(_m, i) for i in (17, 20, 23)]        # neck -> head
 PARTS = {
     "backbone": (["images"], B),
     "neck_head": (B, ["output0"]),
@@ -33,6 +51,8 @@ PARTS = {
 }
 
 OUT.mkdir(parents=True, exist_ok=True)
+shutil_copy = __import__("shutil").copy
+shutil_copy(SRC, OUT / "full.onnx")
 for name, (ins, outs) in PARTS.items():
     extract_model(str(SRC), str(OUT / f"{name}.onnx"), ins, outs)
     m = onnx.load(str(OUT / f"{name}.onnx"))

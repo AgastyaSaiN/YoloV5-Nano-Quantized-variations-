@@ -11,6 +11,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 R = Path(__file__).resolve().parent.parent / "results"
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import extra_sections  # noqa: E402
+import story  # noqa: E402
 CH = R / "charts_summary"
 CH.mkdir(exist_ok=True)
 S = {(r["format"], r["model"]): r for r in json.loads((R / "summary.json").read_text())}
@@ -158,6 +162,7 @@ PRF_TXT = (f"relative to FP32, designs with an FP32 head (M2, M3) change precisi
            f"recall by {sg(_rg(_m1, 'recall@0.25', _fp)[0])} to {sg(_rg(_m1, 'recall@0.25', _fp)[1])} and F1 by {sg(_rg(_m1, 'F1@0.25', _fp)[0])} to {sg(_rg(_m1, 'F1@0.25', _fp)[1])}. "
            f"Recall falls in every quantized model, while precision is roughly unchanged or slightly higher when the head stays FP32 and lower when it does not.")
 best_acc = max(range(1, 7), key=lambda i: O(i)["mAP50-95"])
+img_story = img(story.story_chart(CH), "Progress by stage")
 html = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>YOLOv5n Quantization: Models and Benchmark Results</title>
@@ -190,8 +195,11 @@ footer {{ margin-top:60px; padding-top:14px; border-top:1px solid #ddd; color:#7
 </style></head><body><main class="page">
 
 <h1>YOLOv5n Quantization: Models Built and Benchmark Results</h1>
-<p class="meta">Original YOLOv5n v7.0 &nbsp;|&nbsp; target: embedded NPU (i.MX8-class) &nbsp;|&nbsp; test set: COCO val2017, all 5000 images &nbsp;|&nbsp; formats: ONNX and TFLite</p>
-<nav><a href="#done">What was done</a><a href="#b1">1 mAP@0.5</a><a href="#b2">2 mAP@0.5:0.95</a><a href="#b3">3 Binary size</a><a href="#b4">4 Time per image</a><a href="#b5">5 Precision / Recall / F1</a><a href="#b6">6 Memory</a><a href="#cmp">FP32 vs INT8</a><a href="#notes">Notes</a></nav>
+<p class="meta">Original YOLOv5n v7.0 &nbsp;|&nbsp; target: embedded NPU (i.MX8-class) &nbsp;|&nbsp; test set: COCO val2017, all 5000 images &nbsp;|&nbsp; formats: ONNX, TFLite and OpenVINO</p>
+<nav><a href="#story">The story</a><a href="#done">What was done</a><a href="#b1">1 mAP@0.5</a><a href="#b2">2 mAP@0.5:0.95</a><a href="#b3">3 Binary size</a><a href="#b4">4 Time per image</a><a href="#b5">5 Precision / Recall / F1</a><a href="#b6">6 Memory</a><a href="#more">All runtimes, R55 / R80</a><a href="#cmp">FP32 vs INT8</a><a href="#notes">Notes</a></nav>
+
+<span id="story"></span>
+{story.story_html(img_story)}
 
 <h2 id="done">What was done</h2>
 <ol class="steps">
@@ -201,6 +209,7 @@ footer {{ margin-top:60px; padding-top:14px; border-top:1px solid #ddd; color:#7
 <li><b>Two granularities</b> for each: <b>channel-wise</b> (one scale per output channel; "per-channel") and <b>layer-wise</b> (one scale per layer; "per-tensor").</li>
 <li><b>Two formats</b> for everything: <b>ONNX</b> (ONNX Runtime) and <b>TensorFlow Lite</b>. For TFLite, the model is split into separate files at the part boundaries so some parts can stay FP32.</li>
 <li><b>Calibration data:</b> 500 images from COCO train2017 (separate from the test images). <b>Test data:</b> all 5000 COCO val2017 images, scored with the official COCO evaluation (<code>pycocotools</code>).</li>
+<li><b>Second round:</b> the SiLU models were also quantized with OpenVINO (NNCF), and the <b>R55</b> and <b>R80</b> networks were trained, in which the 12 largest SiLU activations became ReLU (fine-tuned with the Detect head frozen and unchanged). Results are in the sections after the six benchmarks.</li>
 </ol>
 {T_MODELS}
 <p>One technical point: for the all-INT8 model (M1) the box coordinates are normalised to 0-1 (divided by 640) before quantizing, as the official YOLOv5 TFLite export does. Without this, M1 scores zero, because box values up to 640 and confidence scores below 1 cannot share one INT8 scale.</p>
@@ -209,37 +218,46 @@ footer {{ margin-top:60px; padding-top:14px; border-top:1px solid #ddd; color:#7
 <p class="def">Detection accuracy when a predicted box counts as correct if it overlaps the true box by at least 50%.</p>
 <figure>{img('1_map50.png', 'mAP@0.5 for every model')}<figcaption>Figure 1. mAP@0.5 per model, ONNX and TFLite.</figcaption></figure>
 {T_MAP50}
+<p class="read">{story.stage_note("map50")}</p>
 <p class="read"><b>Reading:</b> FP32 scores {base_o['mAP50']:.3f}. The best INT8 model, M2 channel-wise, scores {O(3)['mAP50']:.3f} in ONNX and {T(3)['mAP50']:.3f} in TFLite. Channel-wise is higher than layer-wise in every pair.</p>
 
 <h2 id="b2"><span class="n">2.</span> mAP@0.5:0.95</h2>
 <p class="def">The stricter accuracy score: averaged over overlap thresholds from 50% to 95%, so box placement has to be tight. This is the main COCO metric.</p>
 <figure>{img('2_map5095.png', 'mAP@0.5:0.95 for every model')}<figcaption>Figure 2. mAP@0.5:0.95 per model, ONNX and TFLite.</figcaption></figure>
 {T_MAP95}
+<p class="read">{story.stage_note("map")}</p>
 <p class="read"><b>Reading:</b> FP32 scores {base_o['mAP50-95']:.4f}. M2 channel-wise keeps {O(3)['accuracy_retained_pct']:.1f}% (ONNX) and {T(3)['accuracy_retained_pct']:.1f}% (TFLite); M3 channel-wise keeps {O(5)['accuracy_retained_pct']:.1f}% and {T(5)['accuracy_retained_pct']:.1f}%; the all-INT8 M1 keeps {O(1)['accuracy_retained_pct']:.1f}% and {T(1)['accuracy_retained_pct']:.1f}%. Every difference between channel-wise and layer-wise is statistically significant (10-fold paired test).</p>
 
 <h2 id="b3"><span class="n">3.</span> Binary size and compression ratio</h2>
 <p class="def">File size of each model, and compression ratio = FP32 file size divided by the model's size.</p>
 <figure>{img('3_size.png', 'File size for every model')}<figcaption>Figure 3. File size (MB) per model.</figcaption></figure>
 {T_SIZE}
+<p class="read">{story.stage_note("size")}</p>
 <p class="read"><b>Reading:</b> the FP32 model is {base_o['size_mb']:.2f} MB. M1 compresses {O(1)['compression_ratio']:.1f}x, M3 {O(5)['compression_ratio']:.1f}x (ONNX) and {T(5)['compression_ratio']:.1f}x (TFLite), M2 {O(3)['compression_ratio']:.1f}x. M2 and M3 are larger than M1 because the FP32 parts are stored in full precision.</p>
 
 <h2 id="b4"><span class="n">4.</span> Execution time per image</h2>
-<p class="def">Time for the model to process one image (batch 1, 4 CPU threads), median of 200 runs after warm-up. Measured on a desktop CPU, not the NPU.</p>
+<p class="def">Time for the model to process one image (batch 1, 4 threads pinned to 4 physical cores of an i5-11400H), median over 9 interleaved rounds of 100 runs, each after 20 warm-up calls. Measured on a laptop CPU, not the NPU. The full protocol is in the section on measurement protocol below.</p>
 <figure>{img('4_time.png', 'Inference time per image')}<figcaption>Figure 4. Median milliseconds per image.</figcaption></figure>
 {T_TIME}
+<p class="read">{story.stage_note("time")}</p>
 <p class="read"><b>Reading:</b> FP32 takes {base_o['latency_ms_median']:.1f} ms (ONNX) and {base_t['latency_ms_median']:.1f} ms (TFLite) per image. Quantization is working (ONNX Runtime uses integer convolution kernels for the INT8 models): INT8 ONNX models take {sp_o[0]:.0f} to {sp_o[1]:.0f}% less time, TFLite all-INT8 models {sp_t1[0]:.0f} to {sp_t1[1]:.0f}% less, and TFLite M2/M3 {sp_t23[0]:.0f} to {sp_t23[1]:.0f}% less (their FP32 stage still runs as float). In all {N_ROUNDS} rounds every ONNX INT8 model beat FP32; each TFLite INT8 pipeline did so in at least {min(fr_t)} of {N_ROUNDS}. The same model varied by up to {spread:.0f}% between rounds, so small gaps <i>between</i> INT8 variants are not meaningful.{PROF_TXT} These timings do not predict NPU speed.</p>
 
 <h2 id="b5"><span class="n">5.</span> Precision, Recall and F-score</h2>
 <p class="def">At confidence threshold 0.25 and IoU 0.5. <b>Precision</b>: of the objects reported, how many are right. <b>Recall</b>: of the real objects, how many are found. <b>F1</b>: their harmonic mean.</p>
 <figure>{img('5_prf.png', 'Precision, recall and F1')}<figcaption>Figure 5. Precision, recall and F1 per model.</figcaption></figure>
 {T_PRF}
+<p class="read">{story.stage_note("prf")}</p>
 <p class="read"><b>Reading:</b> {PRF_TXT}</p>
 
 <h2 id="b6"><span class="n">6.</span> Memory utilization</h2>
 <p class="def">Peak memory of the process while running inference (a fresh process per model), and how much loading the model adds on its own.</p>
 <figure>{img('6_memory.png', 'Peak memory per model')}<figcaption>Figure 6. Memory added to the process during inference (MB), excluding the runtime baseline.</figcaption></figure>
 {T_MEM}
+<p class="read">{story.stage_note("mem")}</p>
 <p class="read"><b>Reading:</b> the FP32 ONNX model adds {base_o['mem_peak_added_mb']:.0f} MB at peak; the all-INT8 ONNX models add {rg(mo1)} less, while M2 and M3 (which mix INT8 and FP32) add {mo23[0]:.0f} to {mo23[-1]:.0f}% more. In TFLite the FP32 pipeline adds {base_t['mem_peak_added_mb']:.0f} MB, the all-INT8 pipelines {rg(mt1)} less, and M2/M3 {rg(mt23)} less. Memory at load is similar across ONNX models (probably because the runtime re-packs weights whatever their precision; not verified). Measuring memory on the target board would give the figure that matters for deployment.</p>
+
+<span id="more"></span>
+{extra_sections.embed(img(extra_sections.make_chart(CH), "Speed-up versus accuracy retained"))}
 
 <h2 id="cmp">FP32 versus INT8 comparison</h2>
 {T_OV}
@@ -254,5 +272,5 @@ footer {{ margin-top:60px; padding-top:14px; border-top:1px solid #ddd; color:#7
 
 <footer>Generated by <code>scripts/make_benchmark_summary.py</code> from <code>results/summary.json</code>. Raw numbers: <code>results/summary.csv</code>.</footer>
 </main></body></html>"""
-(R / "benchmark_summary.html").write_text(html, encoding="utf-8")
+(R / "benchmark_summary.html").write_text(extra_sections.add_dark_mode(html), encoding="utf-8")
 print("wrote benchmark_summary.html", f"({(R / 'benchmark_summary.html').stat().st_size / 1e3:.0f} KB)")

@@ -30,6 +30,8 @@ def child(kind, path):
     x = np.random.RandomState(0).rand(1, 3, 640, 640).astype(np.float32)
     if kind == "onnx":
         import onnxruntime as ort
+    elif kind == "ov":
+        import openvino as ov
     else:
         from tflite_runner import Pipeline
     proc = psutil.Process()
@@ -50,6 +52,9 @@ def child(kind, path):
         sess = ort.InferenceSession(path, so, providers=["CPUExecutionProvider"])
         name = sess.get_inputs()[0].name
         run = lambda: sess.run(None, {name: x})
+    elif kind == "ov":
+        comp = ov.Core().compile_model(path, "CPU", {"PERFORMANCE_HINT": "LATENCY", "INFERENCE_NUM_THREADS": THREADS})
+        run = lambda: comp(x)
     else:
         pipe = Pipeline(path, THREADS)
         run = lambda: pipe(x)
@@ -73,13 +78,18 @@ if __name__ == "__main__":
         jobs.append(("onnx", DAY2 / f"models/onnx_int8/{n}.onnx", n))
     for d in ["m0_fp32", "m1_all_int8_pc", "m1_all_int8_pt", "m2_backbone_int8_pc", "m2_backbone_int8_pt", "m3_backbone_neck_int8_pc", "m3_backbone_neck_int8_pt"]:
         jobs.append(("tflite", DAY2 / f"models/tflite/{d}", "tflite_" + d))
+    for stem in ("hybrid_s55", "hybrid_s55_v2"):
+        jobs.append(("onnx", DAY2 / f"models/relu/{stem}_norm.onnx", f"h_{stem}_fp32"))
+    jobs.append(("ov", DAY2 / "models/fp32/yolov5n.onnx", "ov_m0_fp32"))
+    for xml in sorted((DAY2 / "models/ov_int8").glob("*.xml")):
+        jobs.append(("ov", xml, "ovq_" + xml.stem))
     out = DAY2 / "results" / "memory.json"
     res = json.loads(out.read_text()) if out.exists() else {}
     venv_py = str(DAY2 / ".venv" / "Scripts" / "python.exe")
     for kind, path, key in jobs:
         if key in res:
             continue
-        py = sys.executable if kind == "onnx" else venv_py
+        py = venv_py if kind == "tflite" else sys.executable
         r = subprocess.run([py, __file__, "--child", kind, str(path)], capture_output=True, text=True)
         if r.returncode:
             print("FAILED", key, r.stderr[-400:])

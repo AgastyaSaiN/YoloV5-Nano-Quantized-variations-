@@ -86,13 +86,13 @@ def install_chunked_calibration(chunk=15, cls=HistogramCalibrater):
     cls.collect_data = chunked
 
 
-def install_calibration_cache(n_calib, method, src_stem="yolov5n"):
+def install_calibration_cache(n_calib, method, src_stem="yolov5n", cls=HistogramCalibrater):
     """Calibration ranges do not depend on which layers are excluded or on per-channel vs per-tensor
     (ORT applies exclusions after calibrating), so compute them once per (n_images, method) and reuse."""
     import pickle
     WORK.mkdir(parents=True, exist_ok=True)
     cache = WORK / f"calib_ranges_{src_stem}_{n_calib}_{method.name}.pkl"
-    orig_collect, orig_compute = HistogramCalibrater.collect_data, HistogramCalibrater.compute_data
+    orig_collect, orig_compute = cls.collect_data, cls.compute_data
 
     def collect(self, reader):
         if not cache.exists():
@@ -105,7 +105,7 @@ def install_calibration_cache(n_calib, method, src_stem="yolov5n"):
         cache.write_bytes(pickle.dumps(ranges))
         return ranges
 
-    HistogramCalibrater.collect_data, HistogramCalibrater.compute_data = collect, compute
+    cls.collect_data, cls.compute_data = collect, compute
 
 
 def preprocessed_model(src=None):
@@ -139,15 +139,18 @@ if __name__ == "__main__":
     ap.add_argument("names", nargs="*", help="e.g. m3_backbone_neck_int8_pc (default: all six)")
     ap.add_argument("--n-calib", type=int, default=500)
     ap.add_argument("--norm", action="store_true", help="use the normalised-box model; output names get a _norm suffix")
+    ap.add_argument("--src", default=None, help="build from this FP32 ONNX instead (output names keep no suffix)")
+    ap.add_argument("--out-dir", default=None)
     a = ap.parse_args()
     install_chunked_calibration()
-    src = SRC_NORM if a.norm else SRC
+    src = Path(a.src) if a.src else (SRC_NORM if a.norm else SRC)
+    out_dir = Path(a.out_dir) if a.out_dir else OUT
     install_calibration_cache(a.n_calib, CalibrationMethod.Percentile, src.stem)
     todo = a.names or [f"{d}_{g}" for d in DESIGNS for g in ("pc", "pt")]
     for name in todo:
         design, g = name.rsplit("_", 1)
-        tag = f"{name}_norm" if a.norm else name
-        if (OUT / f"{tag}.onnx").exists():
+        tag = f"{name}_norm" if (a.norm and not a.src) else name
+        if (out_dir / f"{tag}.onnx").exists():
             print("skip (exists)", tag)
             continue
-        build(design, g == "pc", a.n_calib, tag=tag, src=src)
+        build(design, g == "pc", a.n_calib, tag=tag, src=src, out_dir=out_dir)

@@ -24,7 +24,9 @@ import tensorflow as tf
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import CALIB_DIR, DAY2, preprocess  # noqa: E402
 
-SAVED = DAY2 / "models" / "tflite" / "_work" / "saved"
+TAG = "relu" if "--relu" in sys.argv else ""
+PREFIX = "r_" if TAG else ""
+SAVED = DAY2 / "models" / "tflite" / "_work" / TAG / "saved"
 OUT = DAY2 / "models" / "tflite"
 N_CALIB = 500
 
@@ -64,13 +66,13 @@ def write(design, stages, note):
 
 
 if __name__ == "__main__":
-    want = sys.argv[1:]
+    want = [PREFIX + a for a in sys.argv[1:] if a != "--relu"]
     f32 = lambda part: SAVED / part / f"{part}_float32.tflite"
-    jobs = {"m0_fp32": lambda: write("m0_fp32", [f32("full")], "full float32")}
+    jobs = {PREFIX + "m0_fp32": lambda: write(PREFIX + "m0_fp32", [f32("full")], "full float32")}
     for g, pc in (("pc", True), ("pt", False)):
-        jobs[f"m1_all_int8_{g}"] = (lambda pc=pc, g=g: write(f"m1_all_int8_{g}", [to_int8(SAVED / "full", pc)], "all INT8 incl. head"))
-        jobs[f"m2_backbone_int8_{g}"] = (lambda pc=pc, g=g: write(f"m2_backbone_int8_{g}", [to_int8(SAVED / "backbone", pc), f32("neck_head")], "backbone INT8 | neck+head FP32"))
-        jobs[f"m3_backbone_neck_int8_{g}"] = (lambda pc=pc, g=g: write(f"m3_backbone_neck_int8_{g}", [to_int8(SAVED / "backbone_neck", pc), f32("head")], "backbone+neck INT8 | head FP32"))
+        jobs[f"{PREFIX}m1_all_int8_{g}"] = (lambda pc=pc, g=g: write(f"{PREFIX}m1_all_int8_{g}", [to_int8(SAVED / "full", pc)], "all INT8 incl. head"))
+        jobs[f"{PREFIX}m2_backbone_int8_{g}"] = (lambda pc=pc, g=g: write(f"{PREFIX}m2_backbone_int8_{g}", [to_int8(SAVED / "backbone", pc), f32("neck_head")], "backbone INT8 | neck+head FP32"))
+        jobs[f"{PREFIX}m3_backbone_neck_int8_{g}"] = (lambda pc=pc, g=g: write(f"{PREFIX}m3_backbone_neck_int8_{g}", [to_int8(SAVED / "backbone_neck", pc), f32("head")], "backbone+neck INT8 | head FP32"))
     for name, job in jobs.items():
         if want and name not in want:
             continue

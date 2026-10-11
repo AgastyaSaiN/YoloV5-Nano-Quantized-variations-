@@ -5,6 +5,14 @@ __pycache__/
 
 # TensorFlow toolchain environment (recreate from requirements.txt; about 2 GB)
 .venv/
+.venv_*/
+
+# Training environment and per-epoch training checkpoints / scratch models (resumable, re-creatable)
+models/relu/_resume_*.pt
+models/relu/_speedtest/
+models/relu/_v1_abrupt/
+models/relu/_v2_*
+models/ov_int8/_work/
 
 # Datasets and annotations (re-creatable with scripts/prepare_data.py)
 data/
