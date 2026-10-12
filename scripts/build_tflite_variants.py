@@ -84,3 +84,11 @@ if __name__ == "__main__":
             job()
         except Exception as e:  # keep going so one failure doesn't hide the others
             print("  FAILED:", type(e).__name__, str(e)[:600], flush=True)
+
+    if TAG == "512":                         # layout hint, see tflite_runner.py (onnx2tf leaves the square 64-channel input of the neck+head stage in NCHW order)
+        for g in ("pc", "pt"):
+            m = OUT / f"{PREFIX}m2_backbone_int8_{g}" / "manifest.json"
+            if m.exists():
+                d = json.loads(m.read_text())
+                d["input_perm"] = [{"stage": 2, "shape": [1, 64, 64, 64], "perm": [0, 3, 1, 2]}]
+                m.write_text(json.dumps(d, indent=2))

@@ -22,12 +22,18 @@ class Pipeline:
             it.allocate_tensors()
             self.stages.append((it, it.get_input_details(), it.get_output_details()))
         self.size_mb = man["size_mb"]
+        # Optional layout hints written by build_tflite_variants.py: onnx2tf cannot tell NCHW from NHWC for a square tensor with equal
+        # channel count (e.g. 1x64x64x64 at 512 px) and may leave that stage input in NCHW order; "input_perm" transposes it back.
+        self.input_perm = {(h["stage"], tuple(h["shape"])): tuple(h["perm"]) for h in man.get("input_perm", [])}
 
     def __call__(self, x_nchw):
         feeds = [np.ascontiguousarray(x_nchw.transpose(0, 2, 3, 1), dtype=np.float32)]   # NCHW -> NHWC
-        for it, ins, outs in self.stages:
+        for k, (it, ins, outs) in enumerate(self.stages, 1):
             for d in ins:                       # match by shape: the converter may reorder a stage's outputs
                 v = next(f for f in feeds if tuple(f.shape) == tuple(d["shape"]))
+                perm = self.input_perm.get((k, tuple(d["shape"])))
+                if perm:
+                    v = np.ascontiguousarray(v.transpose(perm))
                 it.set_tensor(d["index"], v)
             it.invoke()
             feeds = [it.get_tensor(d["index"]) for d in outs]

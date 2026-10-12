@@ -43,3 +43,9 @@ Every suspicious pattern in the results was tested before the reports were final
 - **Negative results kept in the report.** R55 fine-tuned at 512 px and the plain network fine-tuned at 448 px with the Detect head frozen scored below the un-retrained network at the same size, so they are reported but not recommended.
 - **Cross-session timing.** Latency for the OpenVINO models was re-measured together in one session so that speed-ups are computed within a single run. Absolute milliseconds differ slightly between sessions (laptop thermal state); ratios within a session are stable.
 - **Head check.** The Detect head was compared parameter by parameter with the original after every fine-tune (R55 at 640, R80, R55 at 512, 448 fine-tune): identical.
+
+## Current-stage ONNX Runtime and TFLite models (512 px)
+
+- Rebuilt the six ONNX Runtime and six TFLite INT8 variants at 512 x 512 input from the normalised-box FP32 export, scored on all 5000 val images, timed against the 640 px FP32 baselines of the same format (interleaved, 9 rounds), memory measured 3 times.
+- **Conversion fault found and fixed.** The first TFLite M2 pipeline at 512 px scored 83.5% of FP32 although its backbone is the same as M3's (93.6%). A float-only check (backbone + neck/head stages chained, no quantization) differed from the full model, while backbone-neck + head matched exactly. Cause: onnx2tf cannot tell NCHW from NHWC for the square, 64-channel (1 x 64 x 64 x 64) input of the neck+head stage and left it in NCHW order. A layout hint (`input_perm`) in the pipeline manifest, applied by `scripts/tflite_runner.py`, restores the order; the M2 pipelines then scored 95.5% and 92.7%. The other pipelines were verified unaffected (float chain identical to the full model).
+- The Day 2 bars in the period charts keep the timing as first measured; the main tables use the later re-measurement of the same models (a few percent faster).

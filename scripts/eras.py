@@ -8,7 +8,16 @@ import extra_sections as E
 from extra_sections import BASE, acc, mem
 
 prf = E.J("prf.json")
-LAT = E.lat
+LAT = dict(E.lat)
+# The Day 2 bars keep the Day 2 timing as first measured (results/logs/latency_before_current_stage.json); the later re-measurement of the same models
+# (taken in the session that measured the current-stage ONNX/TFLite models) differs by a few percent and is used in the main tables.
+_d2 = Path(__file__).resolve().parent.parent / "results" / "logs" / "latency_before_current_stage.json"
+if _d2.exists():
+    import json as _json
+    _old = _json.loads(_d2.read_text())
+    for _k in KEYS_DAY2 if False else ("m0_fp32", "m1_all_int8_pc_norm", "m2_backbone_int8_pc", "m3_backbone_neck_int8_pc"):
+        if _k in _old:
+            LAT[_k] = _old[_k]
 SHADES = {"Day 2": "#bcd0ee", "Day 3": "#6f98d6", "Current": "#1f4e9e"}
 DESIGNS = [("M1 all INT8", "m1"), ("M2 backbone INT8", "m2"), ("M3 backbone + neck INT8", "m3")]
 KEYS = {  # period -> design -> result key (accuracy / latency / memory / prf all share the key)

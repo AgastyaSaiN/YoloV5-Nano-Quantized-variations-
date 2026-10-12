@@ -21,7 +21,7 @@ plt.rcParams.update({"font.size": 11, "font.family": "DejaVu Sans", "axes.edgeco
 # model keys per design (ONNX M1 uses the 0-1 box version; the pixel-scale one is shown separately)
 D = [("M1  all INT8\n(head INT8 too)", "m1_all_int8", "_norm"), ("M2  backbone INT8\nneck + head FP32", "m2_backbone_int8", ""),
      ("M3  backbone + neck INT8\nhead FP32", "m3_backbone_neck_int8", "")]
-key = lambda fmt, base, g, suf: (fmt, (f"{base}_{g}{suf}" if fmt == "ONNX" else f"tflite_{base}_{g}"))
+key = lambda fmt, base, g, suf: (fmt, (f"s512_{base}_{g}" if fmt == "ONNX" else f"tflite_s512_{base}_{g}"))      # current stage: 512 px input
 base_map = S[("ONNX", "m0_fp32")]["mAP50-95"]
 
 

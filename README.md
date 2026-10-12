@@ -5,7 +5,7 @@
 - **[docs/IMPLEMENTATIONS.md](docs/IMPLEMENTATIONS.md)**: what was implemented in Day 2, Day 3 and the current stage.
 - **[docs/VERIFICATION.md](docs/VERIFICATION.md)**: the checks made on the results, and the corrections that followed.
 
-## Result in brief
+## Result in brief (first period: 640 px models; the reports show the current stage at 512 px)
 
 FP32 baseline: **mAP50-95 0.281** on all 5000 COCO val2017 images (matches the published 0.28).
 
