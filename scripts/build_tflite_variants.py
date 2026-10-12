@@ -24,8 +24,8 @@ import tensorflow as tf
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import CALIB_DIR, DAY2, preprocess  # noqa: E402
 
-TAG = "relu" if "--relu" in sys.argv else ""
-PREFIX = "r_" if TAG else ""
+TAG = sys.argv[sys.argv.index("--tag") + 1] if "--tag" in sys.argv else ("relu" if "--relu" in sys.argv else "")      # work-folder tag (relu, 512, ...)
+PREFIX = {"relu": "r_"}.get(TAG, f"s{TAG}_" if TAG else "")
 SAVED = DAY2 / "models" / "tflite" / "_work" / TAG / "saved"
 OUT = DAY2 / "models" / "tflite"
 N_CALIB = 500
@@ -66,7 +66,7 @@ def write(design, stages, note):
 
 
 if __name__ == "__main__":
-    want = [PREFIX + a for a in sys.argv[1:] if a != "--relu"]
+    want = [PREFIX + a for a in sys.argv[1:] if not a.startswith("--") and a != TAG]
     f32 = lambda part: SAVED / part / f"{part}_float32.tflite"
     jobs = {PREFIX + "m0_fp32": lambda: write(PREFIX + "m0_fp32", [f32("full")], "full float32")}
     for g, pc in (("pc", True), ("pt", False)):

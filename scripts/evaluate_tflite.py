@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import DAY2, evaluate  # noqa: E402
+from common import DAY2, IMGSZ, evaluate  # noqa: E402
 from tflite_runner import Pipeline  # noqa: E402
 
 ap = argparse.ArgumentParser()
@@ -17,7 +17,7 @@ a = ap.parse_args()
 folder = Path(a.folder)
 name = "tflite_" + folder.name
 pipe = Pipeline(folder)
-res = evaluate(pipe, name, a.n, box_scale=640.0)
+res = evaluate(pipe, name, a.n, box_scale=float(IMGSZ))   # YOLO_IMGSZ selects the input size
 res["size_mb"] = pipe.size_mb
 out = DAY2 / "results" / ("accuracy_tflite_quick.json" if a.n else "accuracy_tflite.json")
 allr = json.loads(out.read_text()) if out.exists() else {}

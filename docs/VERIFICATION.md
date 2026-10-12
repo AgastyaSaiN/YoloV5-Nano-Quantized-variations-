@@ -35,3 +35,11 @@ Every suspicious pattern in the results was tested before the reports were final
 - **OpenVINO/NNCF.** Quantizing with NNCF gave no speed advantage over ONNX Runtime QDQ for the SiLU models beyond the runtime itself.
 - **Hybrid models.** Training is resumable; after every run all Detect-head parameters were compared with the original and are identical.
 - **Hardware resets.** The laptop reset unexpectedly several times during long jobs (Windows event 41, no crash dump); jobs were made resumable and short measurements repeated.
+
+## Third round
+
+- **Post-processing is part of the time.** The reference numpy non-maximum suppression took 26.6 ms (threshold 0.001) and 12.5 ms (threshold 0.25) against about 11 to 17 ms for the INT8 model. A compiled routine gives identical detections on 100 of 100 images and takes 5.9 and 3.1 ms (`scripts/benchmark_postprocess.py`).
+- **Smaller input.** The original network exported at 512, 448 and 416 pixels, quantized with the same OpenVINO procedure with calibration images letterboxed to the same size, scored on all 5000 images. Speed-ups are quoted against the 640 px FP32 model.
+- **Negative results kept in the report.** R55 fine-tuned at 512 px and the plain network fine-tuned at 448 px with the Detect head frozen scored below the un-retrained network at the same size, so they are reported but not recommended.
+- **Cross-session timing.** Latency for the OpenVINO models was re-measured together in one session so that speed-ups are computed within a single run. Absolute milliseconds differ slightly between sessions (laptop thermal state); ratios within a session are stable.
+- **Head check.** The Detect head was compared parameter by parameter with the original after every fine-tune (R55 at 640, R80, R55 at 512, 448 fine-tune): identical.

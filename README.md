@@ -2,7 +2,7 @@
 
 - **[results/benchmark_summary.html](results/benchmark_summary.html)**: the short summary (now also with the measurement protocol, OpenVINO and ReLU-hybrid results, and the speed-versus-accuracy chart). What was built, then the six benchmark metrics one by one (mAP@0.5, mAP@0.5:0.95, binary size and compression ratio, time per image, precision/recall/F1, memory), each with a chart and a table.
 - **[results/report.html](results/report.html)**: the full report with the extra studies (layer sensitivity, calibration, statistics, profile, method).
-- **[docs/PROGRESS.md](docs/PROGRESS.md)**: the results stage by stage: what was done, why, and what came out.
+- **[docs/IMPLEMENTATIONS.md](docs/IMPLEMENTATIONS.md)**: what was implemented in Day 2, Day 3 and the current stage.
 - **[docs/VERIFICATION.md](docs/VERIFICATION.md)**: the checks made on the results, and the corrections that followed.
 
 ## Result in brief
@@ -73,15 +73,21 @@ Day 2 reads Day 1's `val2017.zip` in place (about 780 MB) rather than copying it
 - Layer sensitivity uses the first 1000 val images and one layer at a time; upsample layers could not be quantized in isolation.
 - Quantization-aware training was not attempted.
 
-## Latest speed results (idle machine, 4 pinned cores, batch 1, 20 warm-up + 100 timed calls, 9 interleaved rounds)
+## Latest speed results (OpenVINO, idle machine, 4 pinned cores, batch 1, 20 warm-up + 100 timed calls, 9 interleaved rounds)
 
-| Model | Runtime | Retained accuracy | Speed-up vs FP32 of same runtime |
-|---|---|---|---|
-| M2 INT8 (SiLU) | ONNX Runtime | 98.4% | 1.33x |
-| M3 INT8 (SiLU, NNCF) | OpenVINO | 97.7% | 1.41x |
-| Hybrid-55 v2, M3 (12 activations ReLU) | OpenVINO | 92.5% | 1.71x |
-| Hybrid-55 v2, M1 all INT8 | OpenVINO | 91.9% | 1.82x |
-| Hybrid-80, M3 (29 activations ReLU) | OpenVINO | 88.6% | 1.88x |
-| Hybrid-80, M1 all INT8 | OpenVINO | 88.4% | 2.02x |
+Speed-up is against the FP32 model at 640 px in the same runtime. The Detect head is unchanged in every model.
 
-The Detect head is unchanged in every model. 2x was reached only by the all-INT8 Hybrid-80 model, at about 88% of the FP32 accuracy; 2x at 95% or more accuracy was not reached; 4x is not reachable on this CPU. Details: [results/report.html](results/report.html).
+| Model | Accuracy retained | Speed-up |
+|---|---|---|
+| M3 INT8, 640 px (SiLU) | 97.7% | 1.41x |
+| M3 INT8, 512 px | 95.7% | 2.14x |
+| M1 all-INT8, 512 px | 95.0% | 2.23x |
+| M3 INT8, 448 px | 92.2% | 2.73x |
+| M3 INT8, 416 px | 88.9% | 3.14x |
+| R55 M3, 640 px (12 activations ReLU) | 92.5% | 1.70x |
+| R80 M1 all-INT8, 640 px (29 ReLU) | 88.4% | 2.01x |
+
+End to end (preprocessing + model + post-processing at confidence 0.25): 39.3 ms for the FP32 baseline with the numpy post-processing, 16.1 ms for the 512 px INT8 M3 model with compiled post-processing (2.43x).
+
+Findings: a smaller input size beat every activation change (2x at over 95% of the accuracy at 512 px); ReLU models and fine-tuning at the smaller size did worse than lowering the resolution of the original network; post-processing took longer than the model and a compiled routine with identical output cuts it about 4x. 4x is not reachable on this CPU. Details: [results/report.html](results/report.html), [docs/IMPLEMENTATIONS.md](docs/IMPLEMENTATIONS.md).
+

@@ -37,12 +37,12 @@ def swap_silu_to_relu(model, act="relu"):
     return n
 
 
-def normalise_boxes(src, dst):
+def normalise_boxes(src, dst, size=640):
     m = onnx.load(str(src)); done = 0
     for node in m.graph.node:
         if node.op_type == "Constant" and node.name.startswith("/model.24/") and node.name.split("/")[-1] in SCALE_CONSTANTS:
             t = nh.to_array(node.attribute[0].t)
-            node.attribute[0].t.CopyFrom(nh.from_array((t / 640.0).astype(np.float32), node.attribute[0].t.name)); done += 1
+            node.attribute[0].t.CopyFrom(nh.from_array((t / float(size)).astype(np.float32), node.attribute[0].t.name)); done += 1
     assert done == 6, done
     onnx.save(m, str(dst))
 
@@ -53,6 +53,7 @@ if __name__ == "__main__":
     ap.add_argument("--tag", default="relu_untrained")
     ap.add_argument("--act", default="relu", choices=["relu", "hardswish", "relu6"])
     ap.add_argument("--opset", default="13")
+    ap.add_argument("--imgsz", type=int, default=640, help="export size (multiple of 32); boxes are normalised by this size")
     ap.add_argument("--keep-acts", action="store_true", help="export the checkpoint as-is (hybrid models keep SiLU in some layers)")
     a = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
@@ -62,7 +63,7 @@ if __name__ == "__main__":
         print("swapped", swap_silu_to_relu(model, a.act), f"SiLU -> {a.act} (layers 0-23)")
     pt = OUT / f"{a.tag}.pt"
     torch.save({"model": model.half(), "ema": None, "epoch": -1}, pt)
-    subprocess.run([sys.executable, "export.py", "--weights", str(pt), "--include", "onnx", "--opset", a.opset, "--imgsz", "640", "--device", "cpu"],
+    subprocess.run([sys.executable, "export.py", "--weights", str(pt), "--include", "onnx", "--opset", a.opset, "--imgsz", str(a.imgsz), "--device", "cpu"],
                    cwd=DAY2 / "vendor" / "yolov5", check=True, capture_output=True)
-    normalise_boxes(OUT / f"{a.tag}.onnx", OUT / f"{a.tag}_norm.onnx")
+    normalise_boxes(OUT / f"{a.tag}.onnx", OUT / f"{a.tag}_norm.onnx", a.imgsz)
     print("wrote", pt.name, f"{a.tag}.onnx", f"{a.tag}_norm.onnx")

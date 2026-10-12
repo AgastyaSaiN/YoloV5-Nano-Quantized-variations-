@@ -47,7 +47,12 @@ groups = {
                  ("ov_h_hybrid_s55_v2_fp32", "R55 v2 FP32"),
                  ("ovq_hybrid_s55_m1_mixed", "R55 v1 M1, NNCF"), ("ovq_hybrid_s55_m2_mixed", "R55 v1 M2, NNCF"), ("ovq_hybrid_s55_m3_mixed", "R55 v1 M3, NNCF"),
                  ("ovq_hybrid_s55_v2_m1_mixed", "R55 v2 M1, NNCF"), ("ovq_hybrid_s55_v2_m2_mixed", "R55 v2 M2, NNCF"), ("ovq_hybrid_s55_v2_m3_mixed", "R55 v2 M3, NNCF"),
-                 ("ovq_hybrid_s80_m1_mixed", "R80 M1, NNCF"), ("ovq_hybrid_s80_m2_mixed", "R80 M2, NNCF"), ("ovq_hybrid_s80_m3_mixed", "R80 M3, NNCF")],
+                 ("ovq_hybrid_s80_m1_mixed", "R80 M1, NNCF"), ("ovq_hybrid_s80_m2_mixed", "R80 M2, NNCF"), ("ovq_hybrid_s80_m3_mixed", "R80 M3, NNCF"),
+                 ("ovq_f512_m1_mixed", "512 px M1, NNCF"), ("ovq_f512_m3_mixed", "512 px M3, NNCF"), ("ovq_f448_m1_mixed", "448 px M1, NNCF"), ("ovq_f448_m3_mixed", "448 px M3, NNCF"),
+                 ("ovq_f416_m1_mixed", "416 px M1, NNCF"), ("ovq_f416_m3_mixed", "416 px M3, NNCF"),
+                 ("ovq_r55_512_m1_mixed", "R55 at 512 px M1 (fine-tuned at 512)"), ("ovq_r55_512_m3_mixed", "R55 at 512 px M3 (fine-tuned at 512)"),
+                 ("ovq_s80_512_m1_mixed", "R80 at 512 px M1"), ("ovq_s80_512_m3_mixed", "R80 at 512 px M3"),
+                 ("ovq_ft_448_m1_mixed", "448 px fine-tuned M1"), ("ovq_ft_448_m3_mixed", "448 px fine-tuned M3")],
     "TFLite": [("tflite_m0_fp32", "FP32 baseline"), ("tflite_m1_all_int8_pc", "M1 per-channel"), ("tflite_m1_all_int8_pt", "M1 per-tensor"),
                ("tflite_m2_backbone_int8_pc", "M2 per-channel"), ("tflite_m2_backbone_int8_pt", "M2 per-tensor"),
                ("tflite_m3_backbone_neck_int8_pc", "M3 per-channel"), ("tflite_m3_backbone_neck_int8_pt", "M3 per-tensor")],
@@ -72,7 +77,7 @@ T_MM = table(["Design", "ONNX, percentile", "ONNX, min-max", "TFLite (min-max)",
              "Table 5. The same designs with the calibration method matched. Only the calibration method changes between columns 2 and 3.")
 
 LBL = lambda k: {kk: lab for g_ in groups.values() for kk, lab in g_}.get(k, k)
-best_ov = max((k for k in lat if k.startswith("ovq_") and k in acc), key=lambda k: BL / L(k) * (acc[k]["mAP50-95"] / BASE > 0.9))
+best_ov = max((k for k in lat if k.startswith("ovq_") and k in acc), key=lambda k: L("ov_m0_fp32") / L(k) * (acc[k]["mAP50-95"] / BASE >= 0.95))
 cpu = env["cpu"].replace("(R)", "").replace("(TM)", "")
 
 
@@ -100,6 +105,21 @@ def make_chart(out_dir):
     return "8_speed_accuracy_tradeoff.png"
 
 
+PP = J("postprocess.json")
+def _e2e(label, model_ms, post_key, size):
+    pre = PP["pre_ms"] * (size / 640) ** 2
+    post = PP[post_key]
+    return label, pre, model_ms, post, pre + model_ms + post
+_rows = [_e2e("FP32 baseline, 640 px, numpy post-processing, threshold 0.001", L("ov_m0_fp32"), "post_ms_numpy_conf0.001", 640),
+         _e2e("FP32 baseline, 640 px, numpy post-processing, threshold 0.25", L("ov_m0_fp32"), "post_ms_numpy_conf0.25", 640),
+         _e2e("INT8 M3 (OpenVINO), 640 px, compiled post-processing, threshold 0.25", L("ovq_m3_mixed"), "post_ms_compiled_conf0.25", 640),
+         _e2e("INT8 M3 (OpenVINO), 512 px, compiled post-processing, threshold 0.25", L("ovq_f512_m3_mixed"), "post_ms_compiled_conf0.25", 512),
+         _e2e("INT8 M3 (OpenVINO), 448 px, compiled post-processing, threshold 0.25", L("ovq_f448_m3_mixed"), "post_ms_compiled_conf0.25", 448)]
+_ref = _rows[1][4]
+E2E_TABLE = table(["Pipeline", "Pre (ms)", "Model (ms)", "Post (ms)", "Total (ms)", "vs FP32 baseline at threshold 0.25"],
+                  [[r[0], f"{r[1]:.1f}", f"{r[2]:.1f}", f"{r[3]:.1f}", f"{r[4]:.1f}", f"{_ref / r[4]:.2f}x"] for r in _rows],
+                  "End-to-end time per image on the benchmark CPU (4 pinned cores). Preprocessing at other sizes is scaled by pixel count; post-processing time is that of the same detections as measured at 640 px (a conservative figure for smaller inputs).")
+
 SECTION = f"""<h2>1. Measurement protocol</h2>
 <div class="tablewrap"><table class="text"><caption>Table 1. How speed and memory were measured.</caption><tbody>
 <tr><td>CPU</td><td>{html.escape(cpu)}: {env['physical_cores']} physical cores, {env['logical_processors']} logical processors; AVX-512 with VNNI (fast INT8 dot products).</td></tr>
@@ -126,7 +146,7 @@ SECTION = f"""<h2>1. Measurement protocol</h2>
 <li><b>The convolutions are only part of the time.</b> In FP32 the SiLU activation is fused into the convolution. In INT8 it is a separate sigmoid and multiply on every layer, and its cost grows with the size of the activation tensor, which is largest in the first layers.</li>
 <li><b>Other operators do not speed up:</b> in ONNX Runtime the Resize and Concat steps of the neck need extra requantization work, so quantizing the neck (M3) is slower than leaving it in FP32 (M2). This was seen in the per-operation profile (<code>results/profile.json</code>).</li>
 <li><b>Result with SiLU:</b> INT8 reaches {BL / L('m2_backbone_int8_pc'):.2f}x at best in ONNX Runtime and {L('ov_m0_fp32') / L('ovq_m1_mixed'):.2f}x in OpenVINO (Tables 2 and 3), and no more in TFLite on this CPU.</li>
-<li><b>Result with ReLU in the largest layers (Detect head bit-identical):</b> the INT8 convolutions fuse their activation. With 12 of 57 activations as ReLU (R55) OpenVINO reaches {L('ov_m0_fp32') / L('ovq_hybrid_s55_v2_m3_mixed'):.2f}x (head FP32) and {L('ov_m0_fp32') / L('ovq_hybrid_s55_v2_m1_mixed'):.2f}x (all INT8) over its own FP32 baseline at 92 to 93% of the accuracy. With 29 of 57 (R80) it reaches {L('ov_m0_fp32') / L('ovq_hybrid_s80_m3_mixed'):.2f}x and {L('ov_m0_fp32') / L('ovq_hybrid_s80_m1_mixed'):.2f}x, at about 88 to 89% of the accuracy. The 2x mark is reached only by the all-INT8 R80 model, at the cost of about 12% of the accuracy; 2x at 95% or more accuracy was not reached.</li>
+<li><b>Result with ReLU in the largest layers (Detect head bit-identical):</b> the INT8 convolutions fuse their activation. With 12 of 57 activations as ReLU (R55) OpenVINO reaches {L('ov_m0_fp32') / L('ovq_hybrid_s55_v2_m3_mixed'):.2f}x (head FP32) and {L('ov_m0_fp32') / L('ovq_hybrid_s55_v2_m1_mixed'):.2f}x (all INT8) over its own FP32 baseline at 92 to 93% of the accuracy. With 29 of 57 (R80) it reaches {L('ov_m0_fp32') / L('ovq_hybrid_s80_m3_mixed'):.2f}x and {L('ov_m0_fp32') / L('ovq_hybrid_s80_m1_mixed'):.2f}x, at about 88 to 89% of the accuracy. The 2x mark is reached by the all-INT8 R80 model only at the cost of about 12% of the accuracy. A smaller input size does better: 2x at 95% or more of the accuracy (Section 6).</li>
 <li>A 4x gain needs hardware where INT8 is not just faster but the only path (an NPU); this CPU cannot show that.</li>
 </ul>
 
@@ -134,11 +154,26 @@ SECTION = f"""<h2>1. Measurement protocol</h2>
 <p>R55 changed 12 of the 57 activations (layers 0 to 4 and 17, about 55% of the activation work) from SiLU to ReLU; R80 changed 29 (81% of the activation work, layers 0 to 6, 13, 17 and 20) and the network was fine-tuned with distillation from the original model through a frozen Detect head. v1 used an abrupt swap and short training; v2 used a gradual swap, ground-truth loss, EMA and 24 epochs. The Detect head weights are identical to the original (verified by comparing every parameter).</p>
 <ul>
 <li>FP32 accuracy: R55 v1 {acc['hybrid_s55_fp32']['mAP50-95']:.4f} ({acc['hybrid_s55_fp32']['mAP50-95'] / BASE * 100:.1f}% retained), R55 v2 {acc['hybrid_s55_v2_fp32']['mAP50-95']:.4f} ({acc['hybrid_s55_v2_fp32']['mAP50-95'] / BASE * 100:.1f}%), R80 {acc['hybrid_s80_fp32']['mAP50-95']:.4f} ({acc['hybrid_s80_fp32']['mAP50-95'] / BASE * 100:.1f}%). Replacing more activations buys speed and costs accuracy: each extra step is roughly 0.3x speed for 3 to 4 points.</li>
-<li>Fastest model keeping 90% or more of the accuracy: <b>{LBL(best_ov)}</b>, {L('ov_m0_fp32') / L(best_ov):.2f}x versus the OpenVINO FP32 baseline, at {acc[best_ov]['mAP50-95'] / BASE * 100:.1f}% retained.</li>
+<li>Fastest model keeping 95% or more of the accuracy: <b>{LBL(best_ov)}</b>, {L('ov_m0_fp32') / L(best_ov):.2f}x versus the OpenVINO FP32 baseline, at {acc[best_ov]['mAP50-95'] / BASE * 100:.1f}% retained.</li>
 <li>For comparison, the best SiLU model that keeps 97% or more (OpenVINO M3, NNCF) is {L('ov_m0_fp32') / L('ovq_m3_mixed'):.2f}x over OpenVINO FP32. The trade is roughly 6 points of retained accuracy for about 0.4x more speed.</li>
 </ul>
 
-<h2>6. Limitations</h2>
+<h2>6. A smaller input size</h2>
+<p>Computation falls with the square of the input size, so the plain network (SiLU, no retraining, Detect head untouched) was exported at 512, 448 and 416 pixels, quantized with the same OpenVINO procedure (calibration images letterboxed to the same size) and scored on all 5000 images (Table 3). Accuracy stays high because most COCO objects are large enough, and speed rises more than with any activation change:</p>
+<ul>
+<li>640 px (reference): M3 {L('ov_m0_fp32') / L('ovq_m3_mixed'):.2f}x at {acc['ovq_m3_mixed']['mAP50-95'] / BASE * 100:.1f}% retained.</li>
+<li>512 px: M3 {L('ov_m0_fp32') / L('ovq_f512_m3_mixed'):.2f}x at {acc['ovq_f512_m3_mixed']['mAP50-95'] / BASE * 100:.1f}% (all-INT8 M1 {L('ov_m0_fp32') / L('ovq_f512_m1_mixed'):.2f}x at {acc['ovq_f512_m1_mixed']['mAP50-95'] / BASE * 100:.1f}%): <b>2x at 95% or more of the accuracy.</b></li>
+<li>448 px: M3 {L('ov_m0_fp32') / L('ovq_f448_m3_mixed'):.2f}x at {acc['ovq_f448_m3_mixed']['mAP50-95'] / BASE * 100:.1f}%.</li>
+<li>416 px: M3 {L('ov_m0_fp32') / L('ovq_f416_m3_mixed'):.2f}x at {acc['ovq_f416_m3_mixed']['mAP50-95'] / BASE * 100:.1f}%.</li>
+</ul>
+<p>Speed-ups are against the 640 px FP32 model, since that is the baseline the lower-resolution models replace. Small objects are the ones lost first, so this is the lever to choose only if the application's objects are not tiny.</p>
+<p><b>Combinations that did not help.</b> The ReLU models were also fine-tuned and exported at 512 px (R55 at 512: {L('ov_m0_fp32') / L('ovq_r55_512_m3_mixed'):.2f}x at {acc['ovq_r55_512_m3_mixed']['mAP50-95'] / BASE * 100:.1f}%), and the plain network was fine-tuned at 448 px with the head frozen ({acc['ovq_ft_448_m3_mixed']['mAP50-95'] / BASE * 100:.1f}% retained after INT8, against {acc['ovq_f448_m3_mixed']['mAP50-95'] / BASE * 100:.1f}% without fine-tuning). Both are worse than simply lowering the resolution of the original network: with the head frozen, retraining on 9,500 images moved the backbone away from what the head expects more than it helped.</p>
+
+<h2>7. End-to-end time per image</h2>
+{E2E_TABLE}
+<p>The model is only part of the time per image. The reference post-processing (a numpy implementation of non-maximum suppression) took {PP['post_ms_numpy_conf0.001']:.1f} ms at the evaluation confidence threshold of 0.001 and {PP['post_ms_numpy_conf0.25']:.1f} ms at the usual deployment threshold of 0.25. Replacing it with a compiled non-maximum-suppression routine gives identical detections on {PP['identical_images_of_100']} of 100 test images and takes {PP['post_ms_compiled_conf0.001']:.1f} ms and {PP['post_ms_compiled_conf0.25']:.1f} ms. Preprocessing (letterbox and conversion) takes {PP['pre_ms']:.1f} ms.</p>
+
+<h2>8. Limitations</h2>
 <ul>
 <li>All timings are from a laptop CPU; an NPU's ranking and speed-ups can differ. The exact target board is not known.</li>
 <li>Round-to-round spread on this laptop is large (see the Round spread column), so differences of a few percent between INT8 variants are not meaningful; differences to FP32 are.</li>
@@ -154,7 +189,7 @@ def embed(img_b64, numbered_from=None):
     out = re.sub(r"Table \d+\. ", "", out)
     h = "<h2>Speed and accuracy, every model</h2>"
     fig = ("<figure>" + img_b64 + "<figcaption><b>Speed against accuracy.</b> Each dot is one model; the further right and up, the better. "
-           "The dashed line marks a 2x speed-up and the dotted line 95% of the FP32 accuracy: no model reaches both.</figcaption></figure>")
+           "The dashed line marks a 2x speed-up and the dotted line 95% of the FP32 accuracy; models in the upper right of both lines are fast and accurate.</figcaption></figure>")
     return out.replace(h, h + chr(10) + fig)
 
 

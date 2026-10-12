@@ -215,6 +215,7 @@ def holdout_loss(student, teacher, ts, tt, loader, dev):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--imgsz", type=int, default=640, help="training image size (multiple of 32); 512 for the reduced-resolution models")
     ap.add_argument("--epochs", type=int, default=12)
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--lr", type=float, default=5e-4)
@@ -244,9 +245,9 @@ def main():
     train_f, hold_f = files[:-HOLDOUT], files[-HOLDOUT:]
     print(f"{len(train_f)} training images, {len(hold_f)} held-out images (all train2017)", flush=True)
     use_gt = a.gt_weight > 0
-    dl = torch.utils.data.DataLoader(Images(train_f, train=True, label_dir=(DAY2 / "data/train2017/labels") if use_gt else None), batch_size=a.batch, shuffle=True,
+    dl = torch.utils.data.DataLoader(Images(train_f, size=a.imgsz, train=True, label_dir=(DAY2 / "data/train2017/labels") if use_gt else None), batch_size=a.batch, shuffle=True,
                                      num_workers=a.workers, drop_last=True, persistent_workers=True, collate_fn=collate_with_labels if use_gt else None)
-    hl = torch.utils.data.DataLoader(Images(hold_f, train=False), batch_size=a.batch, num_workers=2)
+    hl = torch.utils.data.DataLoader(Images(hold_f, size=a.imgsz, train=False), batch_size=a.batch, num_workers=2)
 
     teacher = load_model(a.teacher).to(dev).eval()
     student = load_model(a.teacher if a.init == "silu" else a.student)

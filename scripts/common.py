@@ -16,7 +16,8 @@ DAY2 = Path(__file__).resolve().parent.parent
 VAL_ZIP = DAY2.parent / "Day 1" / "data" / "coco" / "val2017.zip"       # read-only reuse of Day 1's download
 ANN = DAY2 / "data" / "annotations" / "instances_val2017.json"
 CALIB_DIR = DAY2 / "data" / "calib_train2017"
-IMGSZ = 640
+import os
+IMGSZ = int(os.environ.get("YOLO_IMGSZ", 640))      # network input size; 640 unless set for the reduced-resolution study
 CONF_THRES, IOU_THRES, MAX_DET = 0.001, 0.6, 300
 
 
@@ -156,3 +157,26 @@ def evaluate(predict, name, n_images=None, out_dir=None, verbose=True, box_scale
             "AP_small": float(s[3]), "AP_medium": float(s[4]), "AP_large": float(s[5]),
             "AR100": float(s[8]),
             "ms_pre": ms(t_pre), "ms_infer_inrun": ms(t_inf), "ms_post": ms(t_post)}
+
+
+def postprocess_fast(pred, r, pad, orig_shape, box_scale=1.0, conf_thres=CONF_THRES):
+    """Same result as postprocess(), but with torchvision's compiled NMS and a top-k cut before NMS (official YOLOv5 does the same).
+    Used for the end-to-end timing study; evaluation scripts keep postprocess()."""
+    import torch
+    import torchvision
+    p = torch.from_numpy(np.ascontiguousarray(pred, dtype=np.float32))
+    scores = p[:, 5:] * p[:, 4:5]
+    i, j = torch.nonzero(scores > conf_thres, as_tuple=True)
+    if not i.numel():
+        return np.zeros((0, 6), np.float32)
+    xywh = p[i, :4] * box_scale
+    box = torch.stack([xywh[:, 0] - xywh[:, 2] / 2, xywh[:, 1] - xywh[:, 3] / 2, xywh[:, 0] + xywh[:, 2] / 2, xywh[:, 1] + xywh[:, 3] / 2], 1)
+    conf = scores[i, j]
+    if conf.numel() > 30000:
+        top = conf.topk(30000).indices
+        box, conf, j = box[top], conf[top], j[top]
+    keep = torchvision.ops.nms(box + j[:, None].float() * 7680, conf, IOU_THRES)[:MAX_DET]
+    out = torch.cat([box[keep], conf[keep, None], j[keep, None].float()], 1).numpy()
+    out[:, [0, 2]] = ((out[:, [0, 2]] - pad[0]) / r).clip(0, orig_shape[1])
+    out[:, [1, 3]] = ((out[:, [1, 3]] - pad[1]) / r).clip(0, orig_shape[0])
+    return out

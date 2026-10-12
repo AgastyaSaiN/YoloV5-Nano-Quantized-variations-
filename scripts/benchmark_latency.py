@@ -39,7 +39,7 @@ def child(kind, path, box_scale):
     items = []
     for i in range(10):
         img = data.read(i)[1]
-        x, r, pad = preprocess(img)
+        x, r, pad = preprocess(img, int(next((s for s in ("512", "448", "416") if s in str(path)), 640)))      # reduced-resolution models take a smaller square input
         items.append((x, r, pad, img.shape[:2]))
     if kind == "onnx":
         import onnxruntime as ort

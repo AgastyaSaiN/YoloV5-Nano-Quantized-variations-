@@ -8,7 +8,7 @@ R = Path(__file__).resolve().parent.parent / "results"
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import extra_sections  # noqa: E402
-import story  # noqa: E402
+import eras  # noqa: E402
 extra_sections.make_chart(R / "charts")
 J = lambda n: json.loads((R / n).read_text())
 rows = J("summary.json")
@@ -152,7 +152,7 @@ if (R / "profile.json").exists():
                  f"Quantizing the neck does not speed it up: the neck region takes {rg_('M3 per-channel', 'neck'):.1f} ms in M3 and {rg_('M1 per-channel', 'neck'):.1f} ms in M1 against {rg_('FP32', 'neck'):.1f} ms in FP32, which is why M2 (neck left in FP32) is the fastest ONNX design. "
                  f"(Profiler kernel times include profiling overhead and do not add up to wall-clock time; this is how ONNX Runtime on this CPU behaves and says nothing about an NPU.)")
 
-img_story = img(story.story_chart(R / "charts"), "Progress by stage")
+era_names = eras.era_chart_files(R / "charts")
 html_doc = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>YOLOv5n INT8 Benchmark, Day 2</title>
@@ -198,7 +198,7 @@ footer {{ margin-top:64px; padding-top:16px; border-top:1px solid #ddd; color:#7
 <li><b>Speed with ReLU activations (R55):</b> replacing the 12 largest SiLU activations with ReLU, fine-tuned with the Detect head frozen and bit-identical, gives 1.7 to 1.8x in OpenVINO at 92 to 93% of the FP32 accuracy (about 2.1x over the ONNX Runtime FP32 baseline). SiLU-only INT8 reaches 1.3 to 1.5x at 97 to 98%. Neither reaches 2x at 95% or more; see &ldquo;Why INT8 is not 2x or 4x faster here&rdquo; below.</li>
 </ul></div>
 
-{story.story_html(img_story)}
+{eras.eras_html(img, era_names)}
 
 <h2>1. Setup</h2>
 <p><b>Models.</b> YOLOv5n has a backbone (layers 0-9), a PANet neck (10-23) and a Detect head (24). Table 1 lists the designs. Each INT8 design is built twice: <i>per-channel</i> (one scale per output channel of each convolution) and <i>per-tensor</i> (one scale per layer).</p>

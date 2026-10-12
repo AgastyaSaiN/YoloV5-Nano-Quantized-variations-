@@ -27,7 +27,8 @@ def child(kind, path):
     import numpy as np
     import psutil
 
-    x = np.random.RandomState(0).rand(1, 3, 640, 640).astype(np.float32)
+    size = int(next((t for t in ("512", "448", "416") if t in path), 640))      # reduced-resolution models take a smaller square input
+    x = np.random.RandomState(0).rand(1, 3, size, size).astype(np.float32)
     if kind == "onnx":
         import onnxruntime as ort
     elif kind == "ov":
