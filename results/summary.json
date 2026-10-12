@@ -19,9 +19,9 @@
     "latency_ms_median": 28.594699997483985,
     "latency_ms_p95": 30.414314995141467,
     "latency_round_spread_pct": 6.299593972687418,
-    "mem_load_mb": 17.747968,
-    "mem_peak_added_mb": 61.64889599999999,
-    "mem_baseline_mb": 56.328192,
+    "mem_load_mb": 17.215488,
+    "mem_peak_added_mb": 61.85369599999999,
+    "mem_baseline_mb": 56.193024,
     "diff_vs_fp32_ci95": [
       0.0,
       0.0
@@ -113,9 +113,9 @@
     "latency_ms_median": 25.48815000045579,
     "latency_ms_p95": 26.68243500374956,
     "latency_round_spread_pct": 5.669105045483742,
-    "mem_load_mb": 16.084991999999993,
-    "mem_peak_added_mb": 51.8144,
-    "mem_baseline_mb": 56.434688,
+    "mem_load_mb": 16.158719999999995,
+    "mem_peak_added_mb": 51.761152,
+    "mem_baseline_mb": 56.2176,
     "diff_vs_fp32_ci95": [
       -0.02702311334708571,
       -0.023449646948908047
@@ -145,9 +145,9 @@
     "latency_ms_median": 25.34620000369614,
     "latency_ms_p95": 26.34447001037188,
     "latency_round_spread_pct": 6.717969555885348,
-    "mem_load_mb": 15.728640000000006,
-    "mem_peak_added_mb": 51.400704,
-    "mem_baseline_mb": 56.500224,
+    "mem_load_mb": 15.880192000000008,
+    "mem_peak_added_mb": 51.535872,
+    "mem_baseline_mb": 56.19712,
     "diff_vs_fp32_ci95": [
       -0.037444534879133885,
       -0.033679018762117215
@@ -177,9 +177,9 @@
     "latency_ms_median": 21.508200003154343,
     "latency_ms_p95": 23.286929995083483,
     "latency_round_spread_pct": 5.398871118238264,
-    "mem_load_mb": 15.814656,
-    "mem_peak_added_mb": 66.797568,
-    "mem_baseline_mb": 56.557568,
+    "mem_load_mb": 16.691199999999995,
+    "mem_peak_added_mb": 66.584576,
+    "mem_baseline_mb": 56.201216,
     "diff_vs_fp32_ci95": [
       -0.0054678301708504145,
       -0.0020465822991306655
@@ -209,9 +209,9 @@
     "latency_ms_median": 21.548699998675147,
     "latency_ms_p95": 23.479079999378882,
     "latency_round_spread_pct": 8.863643742594665,
-    "mem_load_mb": 16.12595199999999,
-    "mem_peak_added_mb": 66.14630399999999,
-    "mem_baseline_mb": 56.467456,
+    "mem_load_mb": 16.891903999999997,
+    "mem_peak_added_mb": 67.043328,
+    "mem_baseline_mb": 56.172544,
     "diff_vs_fp32_ci95": [
       -0.013539155040521595,
       -0.009838579460283063
@@ -241,9 +241,9 @@
     "latency_ms_median": 24.938899998232955,
     "latency_ms_p95": 26.578025001799688,
     "latency_round_spread_pct": 8.523631759666467,
-    "mem_load_mb": 16.781312,
-    "mem_peak_added_mb": 66.195456,
-    "mem_baseline_mb": 56.487936,
+    "mem_load_mb": 16.740352,
+    "mem_peak_added_mb": 66.338816,
+    "mem_baseline_mb": 56.15616,
     "diff_vs_fp32_ci95": [
       -0.008715895781033677,
       -0.004799389689314206
@@ -273,9 +273,9 @@
     "latency_ms_median": 25.07359999435721,
     "latency_ms_p95": 26.566615001502214,
     "latency_round_spread_pct": 5.399703286218601,
-    "mem_load_mb": 16.216064000000003,
-    "mem_peak_added_mb": 65.9456,
-    "mem_baseline_mb": 56.479744,
+    "mem_load_mb": 15.945727999999995,
+    "mem_peak_added_mb": 65.79814400000001,
+    "mem_baseline_mb": 56.139776,
     "diff_vs_fp32_ci95": [
       -0.01979482702646516,
       -0.01600348401457741
@@ -305,9 +305,9 @@
     "latency_ms_median": 32.835999998496845,
     "latency_ms_p95": 36.500634998083115,
     "latency_round_spread_pct": 6.663113627211923,
-    "mem_load_mb": 19.230719999999963,
-    "mem_peak_added_mb": 109.63353599999999,
-    "mem_baseline_mb": 261.513216,
+    "mem_load_mb": 19.152896,
+    "mem_peak_added_mb": 107.50771200000003,
+    "mem_baseline_mb": 261.398528,
     "diff_vs_fp32_ci95": [
       -4.3511132140523026e-07,
       2.280568075042131e-07
@@ -337,9 +337,9 @@
     "latency_ms_median": 25.620649998018052,
     "latency_ms_p95": 27.61097000184236,
     "latency_round_spread_pct": 9.856697592856758,
-    "mem_load_mb": 8.47872000000001,
-    "mem_peak_added_mb": 69.78355199999999,
-    "mem_baseline_mb": 261.75488,
+    "mem_load_mb": 8.454143999999985,
+    "mem_peak_added_mb": 69.746688,
+    "mem_baseline_mb": 261.902336,
     "diff_vs_fp32_ci95": [
       -0.032556434102585796,
       -0.02924485180523109
@@ -369,9 +369,9 @@
     "latency_ms_median": 26.070799998706207,
     "latency_ms_p95": 29.39044500235468,
     "latency_round_spread_pct": 11.440385409094649,
-    "mem_load_mb": 8.134656000000007,
-    "mem_peak_added_mb": 69.49273599999998,
-    "mem_baseline_mb": 261.361664,
+    "mem_load_mb": 7.979008000000022,
+    "mem_peak_added_mb": 69.341184,
+    "mem_baseline_mb": 261.537792,
     "diff_vs_fp32_ci95": [
       -0.046968653096541364,
       -0.04122578078674801
@@ -401,9 +401,9 @@
     "latency_ms_median": 31.53424999982235,
     "latency_ms_p95": 34.65008499479154,
     "latency_round_spread_pct": 8.962635882736608,
-    "mem_load_mb": 13.770752000000016,
-    "mem_peak_added_mb": 95.21152000000001,
-    "mem_baseline_mb": 261.44768,
+    "mem_load_mb": 14.155776000000003,
+    "mem_peak_added_mb": 95.52691199999998,
+    "mem_baseline_mb": 261.390336,
     "diff_vs_fp32_ci95": [
       -0.009469197275891602,
       -0.006488276804249875
@@ -433,9 +433,9 @@
     "latency_ms_median": 30.774699996982235,
     "latency_ms_p95": 34.825810000256745,
     "latency_round_spread_pct": 12.381599188281859,
-    "mem_load_mb": 13.713407999999959,
-    "mem_peak_added_mb": 95.15827199999995,
-    "mem_baseline_mb": 261.4272,
+    "mem_load_mb": 13.201408000000015,
+    "mem_peak_added_mb": 94.63808,
+    "mem_baseline_mb": 261.496832,
     "diff_vs_fp32_ci95": [
       -0.019675824489476926,
       -0.014291697779401908
@@ -465,9 +465,9 @@
     "latency_ms_median": 29.28404999693157,
     "latency_ms_p95": 35.62156999250874,
     "latency_round_spread_pct": 9.133641026423234,
-    "mem_load_mb": 9.691135999999972,
-    "mem_peak_added_mb": 96.24780799999996,
-    "mem_baseline_mb": 261.799936,
+    "mem_load_mb": 9.928703999999982,
+    "mem_peak_added_mb": 96.46079999999995,
+    "mem_baseline_mb": 261.832704,
     "diff_vs_fp32_ci95": [
       -0.014554365170316007,
       -0.010565601640922264
@@ -497,9 +497,9 @@
     "latency_ms_median": 29.36785000929376,
     "latency_ms_p95": 32.000954999239184,
     "latency_round_spread_pct": 5.2211857679814875,
-    "mem_load_mb": 9.36755199999999,
-    "mem_peak_added_mb": 95.89964799999996,
-    "mem_baseline_mb": 261.48864,
+    "mem_load_mb": 9.474047999999982,
+    "mem_peak_added_mb": 96.02662399999997,
+    "mem_baseline_mb": 261.5296,
     "diff_vs_fp32_ci95": [
       -0.028287596498132134,
       -0.02257585402491113
