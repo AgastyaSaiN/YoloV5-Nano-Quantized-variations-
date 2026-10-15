@@ -13,22 +13,27 @@ Each design is built per-channel (one INT8 scale per output channel; "channel-wi
 
 ## Results at a glance (per-channel INT8, model time per image, batch 1, 4 pinned cores)
 
-| Runtime | Model | mAP50-95 | Retained | Size (MB) | ms per image | Speed-up |
-|---|---|---|---|---|---|---|
-| ONNX Runtime | FP32 (640 px) | 0.2811 | 100% | 7.9 | 27.5 | 1.00x |
-| ONNX Runtime | M1 (512 px) | 0.2522 | 89.7% | 2.28 | 17.1 | 1.61x |
-| ONNX Runtime | M2 (512 px) | 0.2694 | 95.8% | 4.80 | 14.4 | 1.90x |
-| ONNX Runtime | M3 (512 px) | 0.2668 | 94.9% | 2.78 | 16.2 | 1.70x |
-| TFLite | FP32 (640 px) | 0.2811 | 100% | 7.9 | 27.6 | 1.00x |
-| TFLite | M1 (512 px) | 0.2469 | 87.8% | 2.15 | 10.2 | 2.72x |
-| TFLite | M2 (512 px) | 0.2677 | 95.2% | 4.73 | 13.8 | 2.01x |
-| TFLite | M3 (512 px) | 0.2643 | 94.0% | 2.67 | 11.1 | 2.49x |
-| OpenVINO | FP32 (640 px) | 0.2811 | 100% | 7.9 | 23.0 | 1.00x |
-| OpenVINO | M1 (512 px) | 0.2669 | 95.0% | 3.13 | 10.0 | 2.30x |
-| OpenVINO | M2 (512 px) | 0.2713 | 96.5% | 5.39 | 12.1 | 1.90x |
-| OpenVINO | M3 (512 px) | 0.2692 | 95.7% | 3.46 | 10.6 | 2.18x |
+The INT8 models take a 512 x 512 picture, so each runtime also has the unquantized FP32 model at 512 px: comparing with that row shows the effect of INT8 alone, comparing with the 640 px row also includes the smaller picture.
 
-End to end (resize + model + box decoding) the 512 px OpenVINO M3 model takes about 16 ms against 40 ms for the FP32 baseline with the reference post-processing. These are laptop CPU figures, not NPU figures.
+| Runtime | Model | mAP50-95 | Retained | Size (MB) | ms per image | Speed-up vs FP32 640 px | Speed-up vs FP32 512 px |
+|---|---|---|---|---|---|---|---|
+| ONNX Runtime | FP32 (640 px) | 0.2811 | 100.0% | 7.9 | 28.9 | 1.00x | 0.68x |
+| ONNX Runtime | FP32 (512 px) | 0.2726 | 97.0% | 7.8 | 19.6 | 1.48x | 1.00x |
+| ONNX Runtime | M1 (512 px) | 0.2522 | 89.7% | 2.28 | 18.0 | 1.61x | 1.09x |
+| ONNX Runtime | M2 (512 px) | 0.2694 | 95.8% | 4.80 | 15.2 | 1.90x | 1.28x |
+| ONNX Runtime | M3 (512 px) | 0.2668 | 94.9% | 2.78 | 17.3 | 1.67x | 1.13x |
+| TFLite | FP32 (640 px) | 0.2811 | 100.0% | 7.9 | 29.5 | 1.00x | 0.66x |
+| TFLite | FP32 (512 px) | 0.2726 | 97.0% | 7.8 | 19.3 | 1.53x | 1.00x |
+| TFLite | M1 (512 px) | 0.2469 | 87.8% | 2.15 | 10.7 | 2.75x | 1.80x |
+| TFLite | M2 (512 px) | 0.2677 | 95.2% | 4.73 | 14.4 | 2.04x | 1.34x |
+| TFLite | M3 (512 px) | 0.2643 | 94.0% | 2.67 | 11.8 | 2.51x | 1.64x |
+| OpenVINO | FP32 (640 px) | 0.2811 | 100.0% | 7.9 | 24.5 | 1.00x | 0.64x |
+| OpenVINO | FP32 (512 px) | 0.2726 | 97.0% | 7.8 | 15.8 | 1.55x | 1.00x |
+| OpenVINO | M1 (512 px) | 0.2669 | 95.0% | 3.13 | 10.7 | 2.29x | 1.48x |
+| OpenVINO | M2 (512 px) | 0.2713 | 96.5% | 5.39 | 12.7 | 1.93x | 1.25x |
+| OpenVINO | M3 (512 px) | 0.2692 | 95.7% | 3.46 | 11.3 | 2.17x | 1.40x |
+
+End to end (resize + model + box decoding) the 512 px OpenVINO M3 model takes about 17 ms against 41 ms for the FP32 baseline with the reference post-processing. These are laptop CPU figures, not NPU figures.
 
 ## Where things are
 

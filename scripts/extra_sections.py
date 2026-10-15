@@ -46,13 +46,13 @@ def row(key, label, fmt, acc_key=None, ref=None):
 
 COLS = ["Runtime", "Model", "Input (px)", "mAP50-95", "Retained", "Size (MB)", "Median ms", "p95 ms", "Speed-up", "Round spread", "Peak mem added (MB)"]
 groups = {
-    "ORT": [("m0_fp32", "FP32 baseline")] + [(f"s512_{d}_{g}", f"{n} {gl}") for d, n in (("m1_all_int8", "M1 all INT8,"), ("m2_backbone_int8", "M2"), ("m3_backbone_neck_int8", "M3")) for g, gl in (("pc", "per-channel"), ("pt", "per-tensor"))],
-    "OpenVINO": [("ov_m0_fp32", "FP32 baseline")] + [(f"ovq_f512_m{i}_mixed", f"M{i}, NNCF") for i in (1, 2, 3)],
+    "ORT": [("m0_fp32", "FP32 baseline"), ("f512_fp32", "FP32, 512 px input")] + [(f"s512_{d}_{g}", f"{n} {gl}") for d, n in (("m1_all_int8", "M1 all INT8,"), ("m2_backbone_int8", "M2"), ("m3_backbone_neck_int8", "M3")) for g, gl in (("pc", "per-channel"), ("pt", "per-tensor"))],
+    "OpenVINO": [("ov_m0_fp32", "FP32 baseline"), ("ov_f512_fp32", "FP32, 512 px input")] + [(f"ovq_f512_m{i}_mixed", f"M{i}, NNCF") for i in (1, 2, 3)],
     "TFLite": [("tflite_m0_fp32", "FP32 baseline"), ("tflite_s512_m0_fp32", "FP32, 512 px input")]
               + [(f"tflite_t512_{d}_{g}", f"{n} {gl}") for d, n in (("m1_all_int8", "M1 all INT8,"), ("m2_backbone_int8", "M2"), ("m3_backbone_neck_int8", "M3")) for g, gl in (("pc", "per-channel"), ("pt", "per-tensor"))]
               + [("tflite_t512_m1_all_int8_pc_io8", "M1 per-channel, integer input/output"), ("tflite_t512_m1_all_int8_pt_io8", "M1 per-tensor, integer input/output")],
 }
-ACC_KEY = {"ov_m0_fp32": "m0_fp32"}
+ACC_KEY = {"ov_m0_fp32": "m0_fp32", "ov_f512_fp32": "f512_fp32"}
 tables = ""
 for i, (rt, items) in enumerate(groups.items(), 1):
     ref = TFL_BL if rt == "TFLite" else (L("ov_m0_fp32") if rt == "OpenVINO" and "ov_m0_fp32" in lat else BL)

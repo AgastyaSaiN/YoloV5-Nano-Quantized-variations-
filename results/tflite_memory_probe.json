@@ -1,0 +1,42 @@
+{
+  "m0_fp32": {
+    "default": {
+      "after_load_mb": 75.005952,
+      "peak_mb": 98.9184
+    },
+    "no_xnnpack": {
+      "after_load_mb": 1.8063360000000017,
+      "peak_mb": 54.030336
+    }
+  },
+  "s512_m0_fp32": {
+    "default": {
+      "after_load_mb": 50.25382400000001,
+      "peak_mb": 65.994752
+    },
+    "no_xnnpack": {
+      "after_load_mb": 1.6547839999999994,
+      "peak_mb": 45.789184000000006
+    }
+  },
+  "t512_m1_all_int8_pc": {
+    "default": {
+      "after_load_mb": 33.35782400000001,
+      "peak_mb": 47.017984
+    },
+    "no_xnnpack": {
+      "after_load_mb": 1.9783680000000032,
+      "peak_mb": 29.315072000000008
+    }
+  },
+  "t512_m3_backbone_neck_int8_pc": {
+    "default": {
+      "after_load_mb": 39.944192,
+      "peak_mb": 53.76409600000001
+    },
+    "no_xnnpack": {
+      "after_load_mb": 1.8841600000000014,
+      "peak_mb": 36.42163200000001
+    }
+  }
+}
