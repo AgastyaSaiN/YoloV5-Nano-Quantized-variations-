@@ -1,26 +1,27 @@
-# Day 2 Method
+# Method
 
 ## Pipeline
-1. **Model:** original YOLOv5n v7.0 (`yolov5n.pt`), exported with the official `export.py` (opset 13, 640x640, FP32) from the downloaded source archive.
-2. **Box normalisation:** `make_normalized_model.py` divides six decode constants in the Detect head (three strides for xy, three anchor grids for wh) by 640, so the box output is 0-1. No extra graph nodes. Verified against the original (maximum difference 6e-5 pixels). Evaluation multiplies boxes by 640 after inference.
-3. **ONNX INT8** (`build_onnx_variants.py`): ONNX Runtime static quantization, QDQ format, weights int8 symmetric, activations uint8, percentile calibration (99.999) on 500 train2017 images. FP32 layers are excluded by node-name prefix: backbone `/model.0-9/`, neck `/model.10-23/`, head `/model.24/`. Per-channel and per-tensor via `per_channel=True/False`.
-4. **TFLite INT8:** the normalised ONNX is split into backbone / neck / head parts (`split_onnx.py`; chained output verified identical to the full model), each converted to a TF SavedModel with onnx2tf (`convert_parts_onnx2tf.sh`), then to TFLite with the TF converter (full-integer, 500 calibration images, min-max, strict INT8 ops). FP32 stages use the float32 conversion. `tflite_runner.py` chains the stages, matching tensors by shape.
-5. **Accuracy** (`common.py`, `evaluate_*.py`): square 640 letterbox, confidence 0.001, NMS IoU 0.6, up to 300 detections, multi-label, as in the official `val.py`; scored with `pycocotools` on all 5000 val2017 images.
-6. **Precision, recall, F1** (`compute_prf.py`): official COCO matching (greedy by score at IoU 0.5, crowd regions ignored, up to 300 detections per image), micro-averaged over classes and images; confidence sweep 0.05-0.95 for P/R/F1 at 0.25 and the best F1.
-7. **Latency** (`benchmark_latency.py`): batch 1, 4 threads, fresh process per measurement; 20 warm-up and 100 timed runs per round; all 14 models interleaved over 9 rounds in shuffled order; figure = median of per-round medians; round spread reported.
-8. **Memory** (`benchmark_memory.py`): fresh process per model; baseline resident memory recorded after the runtime is imported and one input is created; memory added at load and at peak during 35 inferences (2 ms sampler); three repeats, medians reported (`aggregate_memory.py`).
-9. **Profile** (`profile_ort.py`): ONNX Runtime per-node kernel times (median over 40 runs), grouped by network region and operation type.
-10. **Statistics** (`fold_stats.py`, `paired_comparisons.py`): 5000 images split into 10 disjoint folds; per-fold mAP and paired differences with 95% t-intervals.
-11. **Studies:** layer sensitivity (`layer_sensitivity.py`, `sensitivity_qdq_check.py`), calibration-set size (`calib_size_study.py`), calibration method (`calib_method_study.py`).
+1. **Model:** original YOLOv5n v7.0 (`models/fp32/yolov5n.pt`), exported with the official `export.py` (opset 13, FP32) from the vendored source: 640 x 640 for the FP32 reference, 512 x 512 for the INT8 models (`export_onnx.py`).
+2. **Box normalisation** (`make_normalized_model.py`, `export_onnx.py`): six decode constants in the Detect head (three strides for xy, three anchor grids for wh) are divided by the input size, so boxes come out as fractions of the picture. Without this the all-INT8 model scores zero: boxes up to 640 and confidence scores below 1 cannot share one INT8 scale. The head weights are not touched.
+3. **ONNX Runtime INT8** (`build_onnx_variants.py`): static quantization, QDQ format, weights int8 symmetric, activations uint8, percentile calibration, 500 calibration pictures. FP32 parts are excluded by node name (M2: neck + head, M3: head). Per-channel and per-tensor.
+4. **OpenVINO INT8** (`quantize_openvino.py`): NNCF post-training quantization, mixed preset, the same 500 pictures; M2/M3 exclude the neck/head by name pattern.
+5. **TFLite INT8** (`split_onnx.py`, `convert_parts_onnx2tf.sh`, `build_tflite_single.py`): the ONNX model is converted with onnx2tf, then quantized with the TensorFlow Lite converter (full integer, min-max calibration on the same 500 pictures, per-channel weights by default, per-tensor with a switch). For M2 and M3 the layers that stay float are excluded with the quantization debugger's `denylisted_nodes`, so each design is one `.tflite` file; the excluded operations are found from the graph structure (ancestors of the backbone / neck outputs, located by value matching against separately converted parts). `--int-io` builds M1 with int8 input and output. TFLite models run with LiteRT (`tflite_runner.py`).
+6. **Accuracy** (`common.py`, `evaluate_*.py`): letterbox to the model's input size, confidence 0.001, NMS IoU 0.6, up to 300 detections, multi-label, as in the official `val.py`; all 5000 val2017 images, official `pycocotools`.
+7. **Precision, recall, F1** (`compute_prf.py`): official COCO matching (greedy by score at IoU 0.5, crowd regions ignored, up to 300 detections per image), micro-averaged over classes and images, at confidence 0.25.
+8. **Latency** (`benchmark_latency.py`): batch 1, 4 threads pinned to four distinct physical cores, high priority, fresh process per measurement, 20 warm-up and 100 timed runs per round, 9 rounds with all models interleaved in shuffled order; headline = median of the per-round medians. Model time only; pre- and post-processing are timed separately (`benchmark_postprocess.py`).
+9. **Memory** (`benchmark_memory.py`, `aggregate_memory.py`): fresh process per model; resident memory sampled every 2 ms; the figure is the increase over a process that has only loaded the runtime; median of 3 runs.
+10. **TFLite runtime check** (`probe_tflite_runtime.py`): the same `.tflite` files timed with TensorFlow's interpreter and with LiteRT.
+11. **Studies** (results in `results/*.json`, run on the 640 px models): layer sensitivity (`layer_sensitivity.py`, `sensitivity_qdq_check.py`), calibration-set size and method (`calib_size_study.py`, `calib_method_study.py`, `calib_matched_comparison.py`), a per-operation profile (`profile_ort.py`), and 10-fold paired statistics (`fold_stats.py`, `paired_comparisons.py`). The 640 px INT8 models these were run on are archived; `build_onnx_variants.py` rebuilds them from `models/fp32/yolov5n_norm.onnx`.
+12. **Reports** (`make_summary.py`, `make_charts.py`, `make_report.py`, `make_benchmark_summary.py`, with `eras.py` and `extra_sections.py` for the cross-runtime sections): everything is generated from `results/*.json`; no number is typed into a report by hand.
 
 ## The designs
-| Name | Calibration | Kept in FP32 |
-|---|---|---|
-| M1 | percentile | nothing |
-| M2 | percentile | neck + head |
-| M3 | percentile | head |
+| Name | Kept in FP32 |
+|---|---|
+| M1 | nothing |
+| M2 | neck + head |
+| M3 | head |
 
-Each is built per-channel and per-tensor, in ONNX and in TFLite.
+Each is built per-channel and per-tensor in ONNX Runtime and TFLite, and per-channel (NNCF default) in OpenVINO.
 
 ## Data
 - **Calibration:** 500 images, seeded random sample of COCO train2017 (`prepare_data.py`).

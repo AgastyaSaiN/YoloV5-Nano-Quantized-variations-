@@ -7,17 +7,10 @@ __pycache__/
 .venv/
 .venv_*/
 
-# Training environment and per-epoch training checkpoints / scratch models (resumable, re-creatable)
-models/relu/_resume_*.pt
-models/relu/_speedtest/
-models/relu/_v1_abrupt/
-models/relu/_v2_*
-models/ov_int8/_work/
-
 # Datasets and annotations (re-creatable with scripts/prepare_data.py)
 data/
 
-# Raw per-model detection files (about 2.6 GB; regenerate with the evaluate_*.py scripts)
+# Raw per-model detection files (regenerate with the evaluate_*.py scripts)
 results/dets/
 results/dets_*/
 
@@ -26,9 +19,9 @@ results/dets_*/
 results/logs/
 
 # Intermediate build files (calibration caches, split ONNX parts, SavedModels)
-models/onnx_int8/_work/
+models/onnx_int8/
+models/onnx_int8_512/_work/
 models/tflite/_work/
-models/onnx_int8/_prep.onnx
 *_prep.onnx
 
 # Downloaded source archive (the extracted vendor/yolov5/ folder is kept)

@@ -79,7 +79,11 @@ if __name__ == "__main__":
         sys.exit()
     from registry import jobs
     allj = [j for j in jobs(tuple(a.kinds.split(","))) if not a.only or j["key"] in a.only.split(",")]
-    venv_py = str(DAY2 / ".venv" / "Scripts" / "python.exe")
+    try:
+        import ai_edge_litert  # noqa: F401
+        venv_py = sys.executable                  # LiteRT is installed in this Python
+    except ImportError:
+        venv_py = str(DAY2 / ".venv" / "Scripts" / "python.exe")
     rounds = {j["key"]: [] for j in allj}
     rng = random.Random(0)
     for rd in range(a.rounds):

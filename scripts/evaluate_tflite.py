@@ -17,7 +17,7 @@ a = ap.parse_args()
 folder = Path(a.folder)
 name = "tflite_" + folder.name
 pipe = Pipeline(folder)
-res = evaluate(pipe, name, a.n, box_scale=float(IMGSZ))   # YOLO_IMGSZ selects the input size
+res = evaluate(pipe, name, a.n, box_scale=float(IMGSZ), out_dir=(DAY2 / "results" / "dets_quick") if a.n else None)       # quick runs must not overwrite the full detections   # YOLO_IMGSZ selects the input size
 res["size_mb"] = pipe.size_mb
 out = DAY2 / "results" / ("accuracy_tflite_quick.json" if a.n else "accuracy_tflite.json")
 allr = json.loads(out.read_text()) if out.exists() else {}

@@ -1,5 +1,5 @@
 """HTML sections shared by report.html and benchmark_summary.html: measurement protocol, matched-calibration ONNX/TFLite comparison,
-three-runtime result tables, why INT8 is not 2x/4x, ReLU-activation models (R55, R80). Reads results/*.json. Import SECTION_* and make_chart()."""
+three-runtime result tables, why INT8 is not 2x/4x, TFLite recipe and runtime. Reads results/*.json. Import SECTION_* and make_chart()."""
 import html
 import json
 import re
@@ -7,11 +7,13 @@ from pathlib import Path
 
 R = Path(__file__).resolve().parent.parent / "results"
 J = lambda n: json.loads((R / n).read_text())
+RP = J("tflite_runtime_probe.json")                # TFLite models timed with two runtimes (model time only)
 env, lat, mem = J("environment.json"), J("latency.json"), J("memory.json")
 acc = {}
 for f in ("accuracy.json", "accuracy_tflite.json", "accuracy_ov.json"):
     acc.update(J(f))
 cm = J("calib_matched.json")
+ST = J("study_inputs.json")                       # mAP50-95 of the 640 px models behind the calibration study (the model files are archived)
 BASE = acc["m0_fp32"]["mAP50-95"]
 proto = env["benchmark_protocol"]
 L = lambda k: lat[k]["latency_ms_median"]
@@ -32,52 +34,41 @@ def row(key, label, fmt, acc_key=None, ref=None):
     ref = ref or BL
     m = mem.get(key, {})
     mp = m.get("peak_mb")
-    return [fmt, label, f"{a['mAP50-95']:.4f}", f"{a['mAP50-95'] / BASE * 100:.1f}%", f"{a['size_mb']:.2f}",
-            f"{L(key):.1f}", f"{lat[key]['latency_ms_p95']:.1f}", f"{ref / L(key):.2f}x", f"{lat[key]['round_spread_pct']:.0f}%",
-            "" if mp is None else f"{mp:.0f}"]
+    size = "512" if "512" in key else "640"                    # network input size of this model
+    ms, p95, spread = L(key), lat[key]["latency_ms_p95"], f"{lat[key]['round_spread_pct']:.0f}%"
+    if key.endswith("_io8"):            # integer input: the benchmark runner's Python quantization of the picture is not model time, so the model-only probe is shown
+        pr = RP[key.replace("tflite_", "")]["litert"]
+        ms, p95, spread, label = pr["median_ms"], pr["p95_ms"], "n/a", label + " (model time only)"
+    return [fmt, label, size, f"{a['mAP50-95']:.4f}", f"{a['mAP50-95'] / BASE * 100:.1f}%", f"{a['size_mb']:.2f}",
+            f"{ms:.1f}", f"{p95:.1f}", f"{ref / ms:.2f}x", spread,
+            "n/a" if mp is None else f"{mp:.0f}"]
 
 
-COLS = ["Runtime", "Model", "mAP50-95", "Retained", "Size (MB)", "Median ms", "p95 ms", "Speed-up", "Round spread", "Peak mem added (MB)"]
+COLS = ["Runtime", "Model", "Input (px)", "mAP50-95", "Retained", "Size (MB)", "Median ms", "p95 ms", "Speed-up", "Round spread", "Peak mem added (MB)"]
 groups = {
-    "ORT": [("m0_fp32", "FP32 baseline"), ("m1_all_int8_pc_norm", "M1 all INT8, per-channel"), ("m1_all_int8_pt_norm", "M1 all INT8, per-tensor"),
-            ("m2_backbone_int8_pc", "M2 per-channel"), ("m2_backbone_int8_pt", "M2 per-tensor"),
-            ("m3_backbone_neck_int8_pc", "M3 per-channel"), ("m3_backbone_neck_int8_pt", "M3 per-tensor"),
-            ("h_hybrid_s55_fp32", "R55 v1 FP32"), ("h_hybrid_s55_v2_fp32", "R55 v2 FP32")],
-    "OpenVINO": [("ov_m0_fp32", "FP32 baseline"), ("ovq_m1_mixed", "M1 SiLU, NNCF"), ("ovq_m2_mixed", "M2 SiLU, NNCF"), ("ovq_m3_mixed", "M3 SiLU, NNCF"),
-                 ("ov_h_hybrid_s55_v2_fp32", "R55 v2 FP32"),
-                 ("ovq_hybrid_s55_m1_mixed", "R55 v1 M1, NNCF"), ("ovq_hybrid_s55_m2_mixed", "R55 v1 M2, NNCF"), ("ovq_hybrid_s55_m3_mixed", "R55 v1 M3, NNCF"),
-                 ("ovq_hybrid_s55_v2_m1_mixed", "R55 v2 M1, NNCF"), ("ovq_hybrid_s55_v2_m2_mixed", "R55 v2 M2, NNCF"), ("ovq_hybrid_s55_v2_m3_mixed", "R55 v2 M3, NNCF"),
-                 ("ovq_hybrid_s80_m1_mixed", "R80 M1, NNCF"), ("ovq_hybrid_s80_m2_mixed", "R80 M2, NNCF"), ("ovq_hybrid_s80_m3_mixed", "R80 M3, NNCF"),
-                 ("ovq_f512_m1_mixed", "512 px M1, NNCF"), ("ovq_f512_m3_mixed", "512 px M3, NNCF"), ("ovq_f448_m1_mixed", "448 px M1, NNCF"), ("ovq_f448_m3_mixed", "448 px M3, NNCF"),
-                 ("ovq_f416_m1_mixed", "416 px M1, NNCF"), ("ovq_f416_m3_mixed", "416 px M3, NNCF"),
-                 ("ovq_r55_512_m1_mixed", "R55 at 512 px M1 (fine-tuned at 512)"), ("ovq_r55_512_m3_mixed", "R55 at 512 px M3 (fine-tuned at 512)"),
-                 ("ovq_s80_512_m1_mixed", "R80 at 512 px M1"), ("ovq_s80_512_m3_mixed", "R80 at 512 px M3"),
-                 ("ovq_ft_448_m1_mixed", "448 px fine-tuned M1"), ("ovq_ft_448_m3_mixed", "448 px fine-tuned M3")],
-    "TFLite": [("tflite_m0_fp32", "FP32 baseline"), ("tflite_m1_all_int8_pc", "M1 per-channel"), ("tflite_m1_all_int8_pt", "M1 per-tensor"),
-               ("tflite_m2_backbone_int8_pc", "M2 per-channel"), ("tflite_m2_backbone_int8_pt", "M2 per-tensor"),
-               ("tflite_m3_backbone_neck_int8_pc", "M3 per-channel"), ("tflite_m3_backbone_neck_int8_pt", "M3 per-tensor")],
+    "ORT": [("m0_fp32", "FP32 baseline")] + [(f"s512_{d}_{g}", f"{n} {gl}") for d, n in (("m1_all_int8", "M1 all INT8,"), ("m2_backbone_int8", "M2"), ("m3_backbone_neck_int8", "M3")) for g, gl in (("pc", "per-channel"), ("pt", "per-tensor"))],
+    "OpenVINO": [("ov_m0_fp32", "FP32 baseline")] + [(f"ovq_f512_m{i}_mixed", f"M{i}, NNCF") for i in (1, 2, 3)],
+    "TFLite": [("tflite_m0_fp32", "FP32 baseline"), ("tflite_s512_m0_fp32", "FP32, 512 px input")]
+              + [(f"tflite_t512_{d}_{g}", f"{n} {gl}") for d, n in (("m1_all_int8", "M1 all INT8,"), ("m2_backbone_int8", "M2"), ("m3_backbone_neck_int8", "M3")) for g, gl in (("pc", "per-channel"), ("pt", "per-tensor"))]
+              + [("tflite_t512_m1_all_int8_pc_io8", "M1 per-channel, integer input/output"), ("tflite_t512_m1_all_int8_pt_io8", "M1 per-tensor, integer input/output")],
 }
-ACC_KEY = {"ov_m0_fp32": "m0_fp32", "ov_h_hybrid_s55_v2_fp32": "hybrid_s55_v2_fp32", "h_hybrid_s55_fp32": "hybrid_s55_fp32", "h_hybrid_s55_v2_fp32": "hybrid_s55_v2_fp32"}
+ACC_KEY = {"ov_m0_fp32": "m0_fp32"}
 tables = ""
 for i, (rt, items) in enumerate(groups.items(), 1):
     ref = TFL_BL if rt == "TFLite" else (L("ov_m0_fp32") if rt == "OpenVINO" and "ov_m0_fp32" in lat else BL)
     rows = [r for r in (row(k, lab, rt, ACC_KEY.get(k), ref) for k, lab in items) if r]
     cap = {"ORT": "ONNX Runtime", "OpenVINO": "OpenVINO (CPU plugin)", "TFLite": "TFLite (XNNPACK)"}[rt]
-    tables += table(COLS, rows, f"Table {i + 1}. {cap}. Speed-up is against the FP32 baseline of the same runtime.")
+    tables += table(COLS, rows, f"Table {i + 1}. {cap}. Speed-up is against the 640 px FP32 baseline of the same runtime; the Input column gives each model's input size.")
 
 # ---- ONNX versus TFLite, calibration matched
 mm = []
 for k, lab in (("m1_all_int8_pc", "M1 per-channel"), ("m1_all_int8_pt", "M1 per-tensor"), ("m2_backbone_int8_pc", "M2 per-channel"),
                ("m2_backbone_int8_pt", "M2 per-tensor"), ("m3_backbone_neck_int8_pc", "M3 per-channel"), ("m3_backbone_neck_int8_pt", "M3 per-tensor")):
-    o = acc[k + "_norm"]["mAP50-95"] if k.startswith("m1") else acc[k]["mAP50-95"]
-    t = acc["tflite_" + k]["mAP50-95"]
-    c = cm[k]["mAP50-95"]
+    o, t, c = ST["matched_calibration_640px"][k]["onnx_percentile"], ST["matched_calibration_640px"][k]["tflite_minmax"], cm[k]["mAP50-95"]
     mm.append([lab, f"{o:.4f}", f"{c:.4f}", f"{t:.4f}", f"{(o - t) * 100:+.2f}", f"{(c - t) * 100:+.2f}"])
 T_MM = table(["Design", "ONNX, percentile", "ONNX, min-max", "TFLite (min-max)", "ONNX pct. minus TFLite (pts)", "ONNX min-max minus TFLite (pts)"], mm,
-             "Table 5. The same designs with the calibration method matched. Only the calibration method changes between columns 2 and 3.")
+             "Table 5. The same designs with the calibration method matched (640 px models, per-channel and per-tensor). Only the calibration method changes between columns 2 and 3.")
 
-LBL = lambda k: {kk: lab for g_ in groups.values() for kk, lab in g_}.get(k, k)
-best_ov = max((k for k in lat if k.startswith("ovq_") and k in acc), key=lambda k: L("ov_m0_fp32") / L(k) * (acc[k]["mAP50-95"] / BASE >= 0.95))
 cpu = env["cpu"].replace("(R)", "").replace("(TM)", "")
 
 
@@ -89,14 +80,15 @@ def make_chart(out_dir):
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(9.5, 5))
     sets = [("ONNX Runtime", "#1f4e9e", [k for k, _ in groups["ORT"]], BL), ("OpenVINO", "#c0551b", [k for k, _ in groups["OpenVINO"]], L("ov_m0_fp32")),
-            ("TFLite", "#1b7f5c", [k for k, _ in groups["TFLite"]], TFL_BL)]
+            ("TFLite", "#1b7f5c", [k for k, _ in groups["TFLite"] if not k.endswith("_io8")], TFL_BL)]
     for name, col, keys, ref in sets:
         pts = [(ref / L(k), acc[ACC_KEY.get(k, k)]["mAP50-95"] / BASE * 100, k) for k in keys if k in lat and ACC_KEY.get(k, k) in acc]
         ax.scatter([p[0] for p in pts], [p[1] for p in pts], s=42, color=col, label=name)
         for x, y, k in pts:
-            if "hybrid" in k and "m3" in k or k.endswith(("m1_mixed",)) and "hybrid" not in k:
-                ax.annotate(k.replace("ovq_", "").replace("_mixed", "").replace("hybrid_s55_v2", "R55").replace("hybrid_s55", "R55 v1").replace("hybrid_s80", "R80").replace("m1", "M1").replace("m3", "M3"), (x, y), fontsize=7, xytext=(4, 3), textcoords="offset points")
-    ax.axvline(2, color="#999", ls="--", lw=1); ax.text(2.01, 84.5, "2x", color="#666", fontsize=9)
+            if k.endswith(("_pc", "_mixed")):
+                d = "M1" if "m1" in k else "M2" if "m2" in k else "M3" if "m3" in k else ""
+                ax.annotate(d, (x, y), fontsize=7, xytext=(4, 3), textcoords="offset points")
+    ax.axvline(2, color="#999", ls="--", lw=1); ax.text(2.01, ax.get_ylim()[0] + 0.5, "2x", color="#666", fontsize=9)
     ax.axhline(95, color="#999", ls=":", lw=1); ax.text(0.99, 95.3, "95% retained", color="#666", fontsize=9)
     ax.set_xlabel("speed-up over the FP32 model of the same runtime"); ax.set_ylabel("accuracy retained (mAP50-95, % of FP32)")
     ax.yaxis.grid(True, color="#e6e6e6"); ax.set_axisbelow(True); ax.spines[["top", "right"]].set_visible(False)
@@ -106,35 +98,46 @@ def make_chart(out_dir):
 
 
 PP = J("postprocess.json")
+try:
+    import ai_edge_litert
+    LITERT = ai_edge_litert.__version__
+except ImportError:
+    LITERT = "not installed"
+_pick = lambda k: acc.get(k, {}).get("mAP50-95")
+_rt_rows = [[lab, f"{RP[k]['tf']['median_ms']:.1f}", f"{RP[k]['litert']['median_ms']:.1f}", f"{RP[k]['tf']['median_ms'] / RP[k]['litert']['median_ms']:.2f}x"]
+            for k, lab in (("s512_m0_fp32", "FP32 (no quantization)"), ("t512_m1_all_int8_pc", "M1 per-channel"), ("t512_m2_backbone_int8_pc", "M2 per-channel"),
+                           ("t512_m3_backbone_neck_int8_pc", "M3 per-channel"), ("t512_m3_backbone_neck_int8_pt", "M3 per-tensor")) if k in RP]
+RT_TABLE = table(["Same .tflite file (512 px)", "TensorFlow 2.15 interpreter (ms)", "LiteRT interpreter (ms)", "Speed-up from the runtime"], _rt_rows,
+                 "Table 7. One image, batch 1, 4 pinned cores, 20 warm-up and 100 timed calls, model time only. The files and their accuracy are identical; only the program that runs them differs.")
 def _e2e(label, model_ms, post_key, size):
     pre = PP["pre_ms"] * (size / 640) ** 2
     post = PP[post_key]
     return label, pre, model_ms, post, pre + model_ms + post
-_rows = [_e2e("FP32 baseline, 640 px, numpy post-processing, threshold 0.001", L("ov_m0_fp32"), "post_ms_numpy_conf0.001", 640),
-         _e2e("FP32 baseline, 640 px, numpy post-processing, threshold 0.25", L("ov_m0_fp32"), "post_ms_numpy_conf0.25", 640),
-         _e2e("INT8 M3 (OpenVINO), 640 px, compiled post-processing, threshold 0.25", L("ovq_m3_mixed"), "post_ms_compiled_conf0.25", 640),
+_rows = [_e2e("FP32 baseline (OpenVINO), 640 px, numpy post-processing, threshold 0.001", L("ov_m0_fp32"), "post_ms_numpy_conf0.001", 640),
+         _e2e("FP32 baseline (OpenVINO), 640 px, numpy post-processing, threshold 0.25", L("ov_m0_fp32"), "post_ms_numpy_conf0.25", 640),
          _e2e("INT8 M3 (OpenVINO), 512 px, compiled post-processing, threshold 0.25", L("ovq_f512_m3_mixed"), "post_ms_compiled_conf0.25", 512),
-         _e2e("INT8 M3 (OpenVINO), 448 px, compiled post-processing, threshold 0.25", L("ovq_f448_m3_mixed"), "post_ms_compiled_conf0.25", 448)]
+         _e2e("INT8 M1 (TFLite), 512 px, compiled post-processing, threshold 0.25", L("tflite_t512_m1_all_int8_pc"), "post_ms_compiled_conf0.25", 512),
+         _e2e("INT8 M2 (ONNX Runtime), 512 px, compiled post-processing, threshold 0.25", L("s512_m2_backbone_int8_pc"), "post_ms_compiled_conf0.25", 512)]
 _ref = _rows[1][4]
 E2E_TABLE = table(["Pipeline", "Pre (ms)", "Model (ms)", "Post (ms)", "Total (ms)", "vs FP32 baseline at threshold 0.25"],
                   [[r[0], f"{r[1]:.1f}", f"{r[2]:.1f}", f"{r[3]:.1f}", f"{r[4]:.1f}", f"{_ref / r[4]:.2f}x"] for r in _rows],
-                  "End-to-end time per image on the benchmark CPU (4 pinned cores). Preprocessing at other sizes is scaled by pixel count; post-processing time is that of the same detections as measured at 640 px (a conservative figure for smaller inputs).")
+                  "End-to-end time per image on the benchmark CPU (4 pinned cores). Preprocessing at other sizes is scaled by pixel count; post-processing time is that measured at 640 px (a conservative figure for 512 px inputs).")
 
 SECTION = f"""<h2>1. Measurement protocol</h2>
 <div class="tablewrap"><table class="text"><caption>Table 1. How speed and memory were measured.</caption><tbody>
 <tr><td>CPU</td><td>{html.escape(cpu)}: {env['physical_cores']} physical cores, {env['logical_processors']} logical processors; AVX-512 with VNNI (fast INT8 dot products).</td></tr>
 <tr><td>Cores used</td><td>{proto['threads']} threads. {html.escape(proto['thread_placement'])}. Priority: {proto['process_priority']}.</td></tr>
-<tr><td>Batch</td><td>{proto['batch_size']} image per call. Input {html.escape(proto['input'])}. Pre- and post-processing are timed separately and are not in the headline figure.</td></tr>
+<tr><td>Batch</td><td>{proto['batch_size']} image per call. Input 1x3x640x640 float32 for the FP32 reference models and 1x3x512x512 float32 for the INT8 models (preprocessing timed separately). Pre- and post-processing are timed separately and are not in the headline figure.</td></tr>
 <tr><td>Warm-up</td><td>{proto['warmup_calls_per_round']} untimed calls before each timed measurement. The first call is slow (memory allocation, kernel selection); the time settles after 1 to 2 calls, so 20 is a wide margin.</td></tr>
 <tr><td>Timed runs</td><td>{proto['timed_calls_per_round']} calls per measurement, cycling over 10 fixed images.</td></tr>
 <tr><td>Rounds</td><td>{proto['rounds']} rounds. {html.escape(proto['round_order'])}. Headline = {html.escape(proto['statistic'])}. The round spread column is (max minus min) over the median.</td></tr>
-<tr><td>Machine state</td><td>Idle apart from the benchmark, on AC power, Windows power plan: Balanced. Latency was never measured while training ran (that gave an FP32 baseline of 63 ms instead of about 25 ms and was discarded).</td></tr>
+<tr><td>Machine state</td><td>Idle apart from the benchmark, on AC power, Windows power plan: Balanced. All models were measured in the same session, interleaved.</td></tr>
 <tr><td>Memory</td><td>Increase in resident memory over a process that already has the runtime loaded, sampled every 2 ms during inference, median of 3 runs.</td></tr>
-<tr><td>Software</td><td>ONNX Runtime {env['packages_main_env']['onnxruntime']}, OpenVINO {html.escape(env['packages_main_env']['openvino'].split('-')[0])}, TensorFlow {env['packages_tensorflow_env']['tensorflow']}, Python {env['python']}.</td></tr>
+<tr><td>Software</td><td>ONNX Runtime {env['packages_main_env']['onnxruntime']}, OpenVINO {html.escape(env['packages_main_env']['openvino'].split('-')[0])}, TensorFlow {env['packages_tensorflow_env']['tensorflow']} (used to convert models to TFLite), LiteRT {LITERT} (runs the TFLite models), Python {env['python']}.</td></tr>
 </tbody></table></div>
 
 <h2>2. Why ONNX and TFLite differ for the same design</h2>
-<p>The FP32 baselines are identical (mAP50-95 {BASE:.4f}). Quantization is not: ONNX Runtime calibrates with percentile clipping, while the TFLite converter only offers min-max. Percentile ignores rare outliers and so gives finer steps for the typical values. Rebuilding the ONNX models with min-max calibration removes most of the gap (Table 5): the remaining differences are in the range of {min(float(r[5]) for r in mm):+.2f} to {max(float(r[5]) for r in mm):+.2f} mAP points, while the percentile versions are {min(float(r[4]) for r in mm):+.2f} to {max(float(r[4]) for r in mm):+.2f} points above TFLite. The gap is a calibration effect, not a property of the format.</p>
+<p>The FP32 baselines are identical (mAP50-95 {BASE:.4f}). Quantization is not: ONNX Runtime calibrates with percentile clipping, while the TFLite converter only offers min-max. Percentile ignores rare outliers and so gives finer steps for the typical values. Rebuilding the ONNX models with min-max calibration removes most of the gap (table below, measured on 640 px models): the remaining differences are in the range of {min(float(r[5]) for r in mm):+.2f} to {max(float(r[5]) for r in mm):+.2f} mAP points, while the percentile versions are {min(float(r[4]) for r in mm):+.2f} to {max(float(r[4]) for r in mm):+.2f} points above TFLite. The gap is a calibration effect, not a property of the format.</p>
 {T_MM}
 
 <h2>3. Speed and accuracy, every model</h2>
@@ -145,48 +148,46 @@ SECTION = f"""<h2>1. Measurement protocol</h2>
 <ul>
 <li><b>The convolutions are only part of the time.</b> In FP32 the SiLU activation is fused into the convolution. In INT8 it is a separate sigmoid and multiply on every layer, and its cost grows with the size of the activation tensor, which is largest in the first layers.</li>
 <li><b>Other operators do not speed up:</b> in ONNX Runtime the Resize and Concat steps of the neck need extra requantization work, so quantizing the neck (M3) is slower than leaving it in FP32 (M2). This was seen in the per-operation profile (<code>results/profile.json</code>).</li>
-<li><b>Result with SiLU:</b> INT8 reaches {BL / L('m2_backbone_int8_pc'):.2f}x at best in ONNX Runtime and {L('ov_m0_fp32') / L('ovq_m1_mixed'):.2f}x in OpenVINO (Tables 2 and 3), and no more in TFLite on this CPU.</li>
-<li><b>Result with ReLU in the largest layers (Detect head bit-identical):</b> the INT8 convolutions fuse their activation. With 12 of 57 activations as ReLU (R55) OpenVINO reaches {L('ov_m0_fp32') / L('ovq_hybrid_s55_v2_m3_mixed'):.2f}x (head FP32) and {L('ov_m0_fp32') / L('ovq_hybrid_s55_v2_m1_mixed'):.2f}x (all INT8) over its own FP32 baseline at 92 to 93% of the accuracy. With 29 of 57 (R80) it reaches {L('ov_m0_fp32') / L('ovq_hybrid_s80_m3_mixed'):.2f}x and {L('ov_m0_fp32') / L('ovq_hybrid_s80_m1_mixed'):.2f}x, at about 88 to 89% of the accuracy. The 2x mark is reached by the all-INT8 R80 model only at the cost of about 12% of the accuracy. A smaller input size does better: 2x at 95% or more of the accuracy (Section 6).</li>
+<li><b>Result with the smaller input size:</b> the INT8 models take a 512 px picture instead of 640 px, which removes about a third of the computation, and run {L('ov_m0_fp32') / L('ovq_f512_m3_mixed'):.2f}x (OpenVINO M3), {TFL_BL / L('tflite_t512_m1_all_int8_pc'):.2f}x (TFLite M1) and {BL / L('s512_m2_backbone_int8_pc'):.2f}x (ONNX Runtime M2) faster than the 640 px FP32 model of the same runtime, at 94 to 96% of its accuracy.</li>
 <li>A 4x gain needs hardware where INT8 is not just faster but the only path (an NPU); this CPU cannot show that.</li>
 </ul>
 
-<h2>5. The R55 and R80 models (ReLU activations)</h2>
-<p>R55 changed 12 of the 57 activations (layers 0 to 4 and 17, about 55% of the activation work) from SiLU to ReLU; R80 changed 29 (81% of the activation work, layers 0 to 6, 13, 17 and 20) and the network was fine-tuned with distillation from the original model through a frozen Detect head. v1 used an abrupt swap and short training; v2 used a gradual swap, ground-truth loss, EMA and 24 epochs. The Detect head weights are identical to the original (verified by comparing every parameter).</p>
-<ul>
-<li>FP32 accuracy: R55 v1 {acc['hybrid_s55_fp32']['mAP50-95']:.4f} ({acc['hybrid_s55_fp32']['mAP50-95'] / BASE * 100:.1f}% retained), R55 v2 {acc['hybrid_s55_v2_fp32']['mAP50-95']:.4f} ({acc['hybrid_s55_v2_fp32']['mAP50-95'] / BASE * 100:.1f}%), R80 {acc['hybrid_s80_fp32']['mAP50-95']:.4f} ({acc['hybrid_s80_fp32']['mAP50-95'] / BASE * 100:.1f}%). Replacing more activations buys speed and costs accuracy: each extra step is roughly 0.3x speed for 3 to 4 points.</li>
-<li>Fastest model keeping 95% or more of the accuracy: <b>{LBL(best_ov)}</b>, {L('ov_m0_fp32') / L(best_ov):.2f}x versus the OpenVINO FP32 baseline, at {acc[best_ov]['mAP50-95'] / BASE * 100:.1f}% retained.</li>
-<li>For comparison, the best SiLU model that keeps 97% or more (OpenVINO M3, NNCF) is {L('ov_m0_fp32') / L('ovq_m3_mixed'):.2f}x over OpenVINO FP32. The trade is roughly 6 points of retained accuracy for about 0.4x more speed.</li>
-</ul>
+<h2>5. The input size</h2>
+<p>Computation falls with the square of the input size, so the INT8 models take a 512 x 512 picture while the FP32 reference takes 640 x 640 (512 x 512 is 0.64 of 640 x 640). The same network at 512 px without quantization scores {acc['f512_fp32']['mAP50-95'] / BASE * 100:.1f}% of the 640 px FP32 accuracy, so the smaller picture itself costs about {100 - acc['f512_fp32']['mAP50-95'] / BASE * 100:.0f} points and quantization costs the rest. Small objects are the ones lost first, so a smaller input suits applications whose objects are not tiny.</p>
 
-<h2>6. A smaller input size</h2>
-<p>Computation falls with the square of the input size, so the plain network (SiLU, no retraining, Detect head untouched) was exported at 512, 448 and 416 pixels, quantized with the same OpenVINO procedure (calibration images letterboxed to the same size) and scored on all 5000 images (Table 3). Accuracy stays high because most COCO objects are large enough, and speed rises more than with any activation change:</p>
-<ul>
-<li>640 px (reference): M3 {L('ov_m0_fp32') / L('ovq_m3_mixed'):.2f}x at {acc['ovq_m3_mixed']['mAP50-95'] / BASE * 100:.1f}% retained.</li>
-<li>512 px: M3 {L('ov_m0_fp32') / L('ovq_f512_m3_mixed'):.2f}x at {acc['ovq_f512_m3_mixed']['mAP50-95'] / BASE * 100:.1f}% (all-INT8 M1 {L('ov_m0_fp32') / L('ovq_f512_m1_mixed'):.2f}x at {acc['ovq_f512_m1_mixed']['mAP50-95'] / BASE * 100:.1f}%): <b>2x at 95% or more of the accuracy.</b></li>
-<li>448 px: M3 {L('ov_m0_fp32') / L('ovq_f448_m3_mixed'):.2f}x at {acc['ovq_f448_m3_mixed']['mAP50-95'] / BASE * 100:.1f}%.</li>
-<li>416 px: M3 {L('ov_m0_fp32') / L('ovq_f416_m3_mixed'):.2f}x at {acc['ovq_f416_m3_mixed']['mAP50-95'] / BASE * 100:.1f}%.</li>
-</ul>
-<p>Speed-ups are against the 640 px FP32 model, since that is the baseline the lower-resolution models replace. Small objects are the ones lost first, so this is the lever to choose only if the application's objects are not tiny.</p>
-<p><b>Combinations that did not help.</b> The ReLU models were also fine-tuned and exported at 512 px (R55 at 512: {L('ov_m0_fp32') / L('ovq_r55_512_m3_mixed'):.2f}x at {acc['ovq_r55_512_m3_mixed']['mAP50-95'] / BASE * 100:.1f}%), and the plain network was fine-tuned at 448 px with the head frozen ({acc['ovq_ft_448_m3_mixed']['mAP50-95'] / BASE * 100:.1f}% retained after INT8, against {acc['ovq_f448_m3_mixed']['mAP50-95'] / BASE * 100:.1f}% without fine-tuning). Both are worse than simply lowering the resolution of the original network: with the head frozen, retraining on 9,500 images moved the backbone away from what the head expects more than it helped.</p>
-
-<h2>7. End-to-end time per image</h2>
+<h2>6. End-to-end time per image</h2>
 {E2E_TABLE}
 <p>The model is only part of the time per image. The reference post-processing (a numpy implementation of non-maximum suppression) took {PP['post_ms_numpy_conf0.001']:.1f} ms at the evaluation confidence threshold of 0.001 and {PP['post_ms_numpy_conf0.25']:.1f} ms at the usual deployment threshold of 0.25. Replacing it with a compiled non-maximum-suppression routine gives identical detections on {PP['identical_images_of_100']} of 100 test images and takes {PP['post_ms_compiled_conf0.001']:.1f} ms and {PP['post_ms_compiled_conf0.25']:.1f} ms. Preprocessing (letterbox and conversion) takes {PP['pre_ms']:.1f} ms.</p>
 
-<h2>8. Limitations</h2>
+<h2>TFLite: how the models are made and run</h2>
+<p>The TFLite models follow the standard TensorFlow Lite / LiteRT recipe for post-training integer quantization (see the sources below):</p>
+<ul>
+<li><b>Representative data.</b> A set of typical inputs, preprocessed exactly like at inference, gives the converter the range of every activation. Here: 500 train2017 pictures letterboxed to the model's input size (the LiteRT example uses 100).</li>
+<li><b>Weights and activations.</b> Weights are int8, symmetric, per output channel in convolutions by default (the &ldquo;channel-wise&rdquo; models) or one scale per tensor (the &ldquo;layer-wise&rdquo; models, a converter switch); activations are int8, one scale per tensor. TFLite's converter offers only min-max range calibration, which is why it differs from the percentile calibration used for ONNX Runtime.</li>
+<li><b>Keeping layers in float inside one file.</b> M2 and M3 keep part of the network in float. The converter's quantization debugger can exclude chosen operations (<code>denylisted_nodes</code>), so the whole model stays in <b>one .tflite file</b>. The converted graph has lost the layer names, so the excluded operations are found from the structure: everything that is not an ancestor of the backbone outputs (M2) or of the neck outputs (M3); the three boundary tensors are located by comparing values with separately converted parts. In M3 the 57 backbone and neck convolutions are INT8 and the 3 Detect-head convolutions are float. The documentation notes that on integer-only accelerators float layers fragment the model, which is why the all-INT8 M1 is the design to try first on an NPU.</li>
+<li><b>Integer input and output.</b> Integer-only targets usually also need int8 model inputs and outputs. The rows marked &ldquo;integer input/output&rdquo; are M1 built this way (the program that runs them quantizes the picture and dequantizes the result with the model's own scales).</li>
+<li><b>Check the FP32 conversion first.</b> The FP32 TFLite model scores the same as the FP32 ONNX model ({acc['tflite_m0_fp32']['mAP50-95']:.4f}), so conversion itself loses nothing and all differences come from quantization.</li>
+</ul>
+<p><b>The runtime mattered more than the model.</b> The TFLite models looked slow next to ONNX Runtime and OpenVINO, but the same files run much faster in the current LiteRT interpreter than in the one built into TensorFlow 2.15 (table below). INT8 TFLite models are now among the fastest in this report, and they use less memory too. All TFLite timings and memory figures in this report were measured with LiteRT {LITERT}; accuracy is unaffected by the choice of runtime (checked on 500 images for M3 per-channel: the same score with both). The gain is specific to INT8: the float model runs about the same in both interpreters.</p>
+{RT_TABLE}
+<p>Sources: <a href="https://developers.google.com/edge/litert/conversion/tensorflow/quantization/post_training_quantization">LiteRT post-training quantization</a>, <a href="https://developers.google.com/edge/litert/conversion/tensorflow/quantization/quantization_debugger">quantization debugger</a> (selective quantization), <a href="https://developers.google.com/edge/litert/conversion/tensorflow/quantization/quantization_spec">8-bit quantization specification</a>.</p>
+
+<h2>7. Limitations</h2>
 <ul>
 <li>All timings are from a laptop CPU; an NPU's ranking and speed-ups can differ. The exact target board is not known.</li>
-<li>Round-to-round spread on this laptop is large (see the Round spread column), so differences of a few percent between INT8 variants are not meaningful; differences to FP32 are.</li>
-<li>The R55 and R80 models are not available as TFLite; TFLite results cover the SiLU designs only.</li>
+<li>The TFLite and OpenVINO runtimes use different INT8 kernels from ONNX Runtime; the ranking between designs differs between runtimes (see the notes under the charts). LiteRT, ONNX Runtime and OpenVINO versions are listed in the protocol table.</li>
+<li>Round-to-round spread on this laptop is a few percent for most models and occasionally much larger (an occasional round is an outlier); the median of nine rounds is robust to that, but differences of a few percent between INT8 variants are not meaningful, while differences to FP32 are.</li>
 <li>OpenVINO INT8 models were quantized with NNCF (mixed preset, 500 calibration images); results for ONNX Runtime QDQ and OpenVINO are different quantizers and runtimes, not one model on two engines.</li>
 </ul>
 """
 
 
-def embed(img_b64, numbered_from=None):
+def embed(img_b64, limits=True):
     """SECTION with the standalone numbering removed and the trade-off chart inserted (img_b64 = <img> tag)."""
     out = re.sub(r"<h2>\d+\. ", "<h2>", SECTION)
     out = re.sub(r"Table \d+\. ", "", out)
+    if not limits:                      # the full report has its own Limitations section
+        out = re.sub(r"<h2>(?:\d+\. )?Limitations</h2>.*?</ul>", "", out, flags=re.S)
     h = "<h2>Speed and accuracy, every model</h2>"
     fig = ("<figure>" + img_b64 + "<figcaption><b>Speed against accuracy.</b> Each dot is one model; the further right and up, the better. "
            "The dashed line marks a 2x speed-up and the dotted line 95% of the FP32 accuracy; models in the upper right of both lines are fast and accurate.</figcaption></figure>")

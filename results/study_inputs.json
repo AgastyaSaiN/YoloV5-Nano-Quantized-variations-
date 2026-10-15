@@ -1,0 +1,35 @@
+{
+  "m1_pc_pixel": 0.0,
+  "m1_pt_pixel": 0.0,
+  "m1_pc_norm": 0.2553393259072357,
+  "m1_pt_norm": 0.2443087511098875,
+  "m3_pc_onnx": 0.27354863484287734,
+  "m3_pc_tflite": 0.2676814099064733,
+  "note": "mAP50-95 of the 640 px models used by the box-scale and calibration studies (the model files themselves are archived)",
+  "matched_calibration_640px": {
+    "m1_all_int8_pc": {
+      "onnx_percentile": 0.2553393259072357,
+      "tflite_minmax": 0.2491195270785726
+    },
+    "m1_all_int8_pt": {
+      "onnx_percentile": 0.2443087511098875,
+      "tflite_minmax": 0.23664161002917863
+    },
+    "m2_backbone_int8_pc": {
+      "onnx_percentile": 0.27656078455204697,
+      "tflite_minmax": 0.2728184397891015
+    },
+    "m2_backbone_int8_pt": {
+      "onnx_percentile": 0.267974591234931,
+      "tflite_minmax": 0.26354067076490534
+    },
+    "m3_backbone_neck_int8_pc": {
+      "onnx_percentile": 0.27354863484287734,
+      "tflite_minmax": 0.2676814099064733
+    },
+    "m3_backbone_neck_int8_pt": {
+      "onnx_percentile": 0.262192085804605,
+      "tflite_minmax": 0.2556957800500958
+    }
+  }
+}

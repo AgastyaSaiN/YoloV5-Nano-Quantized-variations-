@@ -20,7 +20,7 @@ path = Path(a.model)
 name = a.name or path.stem
 sess = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
 inp = sess.get_inputs()[0].name
-res = evaluate(lambda x: sess.run(None, {inp: x})[0][0], name, a.n, box_scale=a.box_scale)
+res = evaluate(lambda x: sess.run(None, {inp: x})[0][0], name, a.n, box_scale=a.box_scale, out_dir=(DAY2 / "results" / "dets_quick") if a.n else None)       # quick runs must not overwrite the full detections
 res["size_mb"] = path.stat().st_size / 1e6
 out = DAY2 / "results" / ("accuracy_quick.json" if a.n else "accuracy.json")
 out.parent.mkdir(exist_ok=True)

@@ -70,28 +70,20 @@ def child(kind, path):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--child", nargs=2, metavar=("KIND", "PATH"))
+    ap.add_argument("--only", default="", help="comma-separated model keys (default: all)")
     a = ap.parse_args()
     if a.child:
         child(*a.child)
         sys.exit()
-    jobs = [("onnx", DAY2 / "models/fp32/yolov5n.onnx", "m0_fp32")]
-    for n in ["m1_all_int8_pc_norm", "m1_all_int8_pt_norm", "m2_backbone_int8_pc", "m2_backbone_int8_pt", "m3_backbone_neck_int8_pc", "m3_backbone_neck_int8_pt"]:
-        jobs.append(("onnx", DAY2 / f"models/onnx_int8/{n}.onnx", n))
-    for d in ["m0_fp32", "m1_all_int8_pc", "m1_all_int8_pt", "m2_backbone_int8_pc", "m2_backbone_int8_pt", "m3_backbone_neck_int8_pc", "m3_backbone_neck_int8_pt"]:
-        jobs.append(("tflite", DAY2 / f"models/tflite/{d}", "tflite_" + d))
-    for m in sorted((DAY2 / "models/onnx_int8_512").glob("*.onnx")) if (DAY2 / "models/onnx_int8_512").exists() else []:
-        jobs.append(("onnx", m, "s512_" + m.stem))
-    for d in sorted((DAY2 / "models/tflite").glob("s512_*")):
-        if (d / "manifest.json").exists():
-            jobs.append(("tflite", d, "tflite_" + d.name))
-    for stem in ("hybrid_s55", "hybrid_s55_v2"):
-        jobs.append(("onnx", DAY2 / f"models/relu/{stem}_norm.onnx", f"h_{stem}_fp32"))
-    jobs.append(("ov", DAY2 / "models/fp32/yolov5n.onnx", "ov_m0_fp32"))
-    for xml in sorted((DAY2 / "models/ov_int8").glob("*.xml")):
-        jobs.append(("ov", xml, "ovq_" + xml.stem))
+    import registry
+    jobs = [(j["kind"], j["path"], j["key"]) for j in registry.jobs() if not a.only or j["key"] in a.only.split(",")]
     out = DAY2 / "results" / "memory.json"
     res = json.loads(out.read_text()) if out.exists() else {}
-    venv_py = str(DAY2 / ".venv" / "Scripts" / "python.exe")
+    try:
+        import ai_edge_litert  # noqa: F401
+        venv_py = sys.executable
+    except ImportError:
+        venv_py = str(DAY2 / ".venv" / "Scripts" / "python.exe")
     for kind, path, key in jobs:
         if key in res:
             continue

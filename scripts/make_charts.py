@@ -11,6 +11,7 @@ import numpy as np
 R = Path(__file__).resolve().parent.parent / "results"
 OUT = R / "charts"
 OUT.mkdir(exist_ok=True)
+ST = json.loads((R / "study_inputs.json").read_text())      # mAP50-95 of the 640 px models used by the box-scale and calibration studies
 S = {(r["format"], r["model"]): r for r in json.loads((R / "summary.json").read_text())}
 INK, GRID, GRAY = "#1a1a1a", "#e6e6e6", "#8a8f98"
 C = {("ONNX", "pc"): "#1f4e9e", ("ONNX", "pt"): "#8fb3e8", ("TFLite", "pc"): "#1b7f5c", ("TFLite", "pt"): "#8fd4b8"}
@@ -21,7 +22,7 @@ plt.rcParams.update({"font.size": 11, "font.family": "DejaVu Sans", "axes.edgeco
 # model keys per design (ONNX M1 uses the 0-1 box version; the pixel-scale one is shown separately)
 D = [("M1  all INT8\n(head INT8 too)", "m1_all_int8", "_norm"), ("M2  backbone INT8\nneck + head FP32", "m2_backbone_int8", ""),
      ("M3  backbone + neck INT8\nhead FP32", "m3_backbone_neck_int8", "")]
-key = lambda fmt, base, g, suf: (fmt, (f"s512_{base}_{g}" if fmt == "ONNX" else f"tflite_s512_{base}_{g}"))      # current stage: 512 px input
+key = lambda fmt, base, g, suf: (fmt, (f"s512_{base}_{g}" if fmt == "ONNX" else f"tflite_t512_{base}_{g}"))      # current stage: 512 px input
 base_map = S[("ONNX", "m0_fp32")]["mAP50-95"]
 
 
@@ -100,8 +101,8 @@ fig.tight_layout(); fig.savefig(OUT / "4_precision_recall_f1.png", dpi=160); plt
 # 5 ---------------------------------------------------------------- pixel vs normalised control
 fig, ax = plt.subplots(figsize=(7, 4.4)); style(ax)
 labs = ["per-channel", "per-tensor"]
-pix = [S[("ONNX", "m1_all_int8_pc")]["mAP50-95"], S[("ONNX", "m1_all_int8_pt")]["mAP50-95"]]
-nrm = [S[("ONNX", "m1_all_int8_pc_norm")]["mAP50-95"], S[("ONNX", "m1_all_int8_pt_norm")]["mAP50-95"]]
+pix = [ST["m1_pc_pixel"], ST["m1_pt_pixel"]]
+nrm = [ST["m1_pc_norm"], ST["m1_pt_norm"]]
 for j, (v, lab, col) in enumerate([(pix, "boxes in pixels (0-640)", "#c0392b"), (nrm, "boxes normalised (0-1)", "#1f4e9e")]):
     bars = ax.bar(np.arange(2) + (j - 0.5) * 0.35, v, 0.35, color=col, label=lab)
     for b_, vv in zip(bars, v):
@@ -133,7 +134,7 @@ fig.tight_layout(); fig.savefig(OUT / "6_layer_sensitivity.png", dpi=160); plt.c
 cs_path = R / "calib_size.json"
 if cs_path.exists():
     cs = json.loads(cs_path.read_text())
-    cs["500"] = {"mAP50-95": S[("ONNX", "m3_backbone_neck_int8_pc")]["mAP50-95"]}
+    cs["500"] = {"mAP50-95": ST["m3_pc_onnx"]}
     ns = sorted(int(k) for k in cs)
     fig, ax = plt.subplots(figsize=(7.5, 4.4)); style(ax)
     ax.plot(ns, [cs[str(n)]["mAP50-95"] for n in ns], marker="o", color="#1f4e9e", lw=2)

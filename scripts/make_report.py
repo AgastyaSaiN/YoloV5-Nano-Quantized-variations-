@@ -12,6 +12,7 @@ import eras  # noqa: E402
 extra_sections.make_chart(R / "charts")
 J = lambda n: json.loads((R / n).read_text())
 rows = J("summary.json")
+ST = J("study_inputs.json")                                  # mAP50-95 of the 640 px models used by the box-scale and calibration studies
 S = {(r["format"], r["model"]): r for r in rows}
 paired, sens = J("paired.json"), J("sensitivity.json")
 calib = J("calib_size.json") if (R / "calib_size.json").exists() else {}
@@ -38,11 +39,11 @@ LABEL = {"m0_fp32": "FP32 baseline", "m1_all_int8_pc": "M1 all INT8, per-channel
          "m3_backbone_neck_int8_pc": "M3 backbone+neck INT8, per-channel", "m3_backbone_neck_int8_pt": "M3 backbone+neck INT8, per-tensor"}
 def name(r):
     k = r["model"].replace("tflite_", "")
-    if k.startswith("s512_"):                                      # current stage: M1 uses the normalised-box model
-        k = k.replace("s512_", "") + ("_norm" if k.startswith("s512_m1") else "")
+    if k.startswith(("s512_", "t512_")):                           # current stage: for ONNX the M1 file is the normalised-box model
+        k = k.replace("s512_", "").replace("t512_", "") + ("_norm" if k.startswith("s512_m1") else "")
     return LABEL[k]
 ONNX = [r for r in rows if r["format"] == "ONNX" and (r["model"] == "m0_fp32" or r["model"].startswith("s512_"))]            # current stage (512 px) + the 640 px FP32 baseline
-TFL = [r for r in rows if r["format"] == "TFLite" and (r["model"] == "tflite_m0_fp32" or r["model"].startswith("tflite_s512_"))]
+TFL = [r for r in rows if r["format"] == "TFLite" and (r["model"] == "tflite_m0_fp32" or r["model"].startswith("tflite_t512_"))]
 
 
 def table(cols, data, caption, num=True):
@@ -55,7 +56,8 @@ def table(cols, data, caption, num=True):
 t_acc = []
 for r in [x for x in ONNX if "m1_all_int8_p" in x["model"] and not x["model"].endswith("_norm")]:
     pass
-acc_rows = [r for r in ONNX if r["model"] not in ("m1_all_int8_pc", "m1_all_int8_pt")] + [r for r in TFL]
+_ord = lambda r: (r["model"].replace("tflite_", "").replace("s512_", "").replace("t512_", "")[:2], r["model"].endswith("_pt"))
+acc_rows = sorted([r for r in ONNX if r["model"] not in ("m1_all_int8_pc", "m1_all_int8_pt")], key=_ord) + sorted([r for r in TFL], key=_ord)
 for r in acc_rows:
     t_acc.append([r["format"], name(r), f"{r['mAP50-95']:.4f}", f"{r['accuracy_retained_pct']:.1f}%", f"{r['mAP50']:.4f}",
                   f"{r['AP_small']:.3f}", f"{r['AP_medium']:.3f}", f"{r['AP_large']:.3f}"])
@@ -81,15 +83,15 @@ T_PAIR = table(["Comparison (A minus B)", "Difference (mAP points)", "95% interv
                "Table 6. Paired comparisons over 10 disjoint image folds. A difference is real if the interval excludes zero.")
 
 cal = {int(k): v["mAP50-95"] for k, v in calib.items()}
-cal[500] = g("ONNX", "m3_backbone_neck_int8_pc")["mAP50-95"]
+cal[500] = ST["m3_pc_onnx"]
 T_CAL = table(["Calibration images", "mAP50-95", "vs 500 images"], [[str(n), f"{cal[n]:.4f}", f"{(cal[n] - cal[500]) * 100:+.2f} pts"] for n in sorted(cal)],
               "Table 7. M3 per-channel (ONNX) calibrated on different numbers of train2017 images, scored on all 5000 val images.")
 
 # ---- precision / recall / F1 notes (data-driven)
 fp = g("ONNX", "m0_fp32")
 d = lambda r, k: r[k] - fp[k]
-hf = [r for r in acc_rows if r["model"].replace("tflite_", "").replace("s512_", "")[:2] in ("m2", "m3")]
-m1r = [r for r in acc_rows if r["model"].replace("tflite_", "").replace("s512_", "")[:2] == "m1"]
+hf = [r for r in acc_rows if r["model"].replace("tflite_", "").replace("s512_", "").replace("t512_", "")[:2] in ("m2", "m3")]
+m1r = [r for r in acc_rows if r["model"].replace("tflite_", "").replace("s512_", "").replace("t512_", "")[:2] == "m1"]
 rg2 = lambda rs, k: (min(d(r, k) for r in rs), max(d(r, k) for r in rs))
 pP, pR, pF, qP, qR, qF = rg2(hf, "precision@0.25"), rg2(hf, "recall@0.25"), rg2(hf, "F1@0.25"), rg2(m1r, "precision@0.25"), rg2(m1r, "recall@0.25"), rg2(m1r, "F1@0.25")
 sg = lambda x: "0.000" if abs(x) < 0.0005 else f"{x:+.3f}"
@@ -99,8 +101,8 @@ prf_text = (f"Relative to FP32, designs with an FP32 head (M2, M3) change precis
 
 # ---- numbers used in the text
 m2o, m3o, m1n = g("ONNX", "s512_m2_backbone_int8_pc"), g("ONNX", "s512_m3_backbone_neck_int8_pc"), g("ONNX", "s512_m1_all_int8_pc")
-m2t, m3t, m1t = g("TFLite", "tflite_s512_m2_backbone_int8_pc"), g("TFLite", "tflite_s512_m3_backbone_neck_int8_pc"), g("TFLite", "tflite_s512_m1_all_int8_pc")
-m1n_d2 = g("ONNX", "m1_all_int8_pc_norm")                                      # first-period (640 px) all-INT8 model, used by the box-scale study
+m2t, m3t, m1t = g("TFLite", "tflite_t512_m2_backbone_int8_pc"), g("TFLite", "tflite_t512_m3_backbone_neck_int8_pc"), g("TFLite", "tflite_t512_m1_all_int8_pc")
+m1n_d2 = {"mAP50-95": ST["m1_pc_norm"]}                                      # earlier (640 px) all-INT8 model, used by the box-scale study
 sb = sens["fp32"]
 lay = sorted(((int(k[1:]), (sb - v) / sb * 100) for k, v in sens.items() if k != "fp32"), key=lambda x: -x[1])
 head_loss, l23 = dict(lay)[24], dict(lay)[23]
@@ -114,7 +116,7 @@ head_pairs = [p for p in paired if "head FP32" in p["comparison"]]
 h_lo, h_hi = min(p["diff"] for p in head_pairs) * 100, max(p["diff"] for p in head_pairs) * 100
 onnx_vs_tfl = [p for p in paired if "ONNX minus TFLite" in p["comparison"]]
 ot_lo, ot_hi = min(p["diff"] for p in onnx_vs_tfl) * 100, max(p["diff"] for p in onnx_vs_tfl) * 100
-_cg = [(g("ONNX", "s512_" + d)["mAP50-95"] - g("TFLite", "tflite_s512_" + d)["mAP50-95"]) * 100 for d in ("m1_all_int8_pc", "m1_all_int8_pt", "m2_backbone_int8_pc", "m2_backbone_int8_pt", "m3_backbone_neck_int8_pc", "m3_backbone_neck_int8_pt")]
+_cg = [(g("ONNX", "s512_" + d)["mAP50-95"] - g("TFLite", "tflite_t512_" + d)["mAP50-95"]) * 100 for d in ("m1_all_int8_pc", "m1_all_int8_pt", "m2_backbone_int8_pc", "m2_backbone_int8_pt", "m3_backbone_neck_int8_pc", "m3_backbone_neck_int8_pt")]
 cur_gap_lo, cur_gap_hi = min(_cg), max(_cg)
 less = lambda a, b: (1 - a / b) * 100
 o_fp, t_fp = g("ONNX", "m0_fp32"), g("TFLite", "tflite_m0_fp32")
@@ -122,6 +124,7 @@ o_int = [r for r in ONNX if r["model"] not in ("m0_fp32", "m1_all_int8_pc", "m1_
 t_m1 = [r for r in TFL if "m1_" in r["model"]]
 t_m23 = [r for r in TFL if "m2_" in r["model"] or "m3_" in r["model"]]
 rng = lambda rs, key, ref: (min(less(r[key], ref[key]) for r in rs), max(less(r[key], ref[key]) for r in rs))
+rr = lambda a: f"{a[0]:.0f}%" if round(a[0]) == round(a[1]) else f"{a[0]:.0f} to {a[1]:.0f}%"      # "66%" or "35 to 42%"
 sp_o, sp_t1, sp_t23 = (rng(o_int, "latency_ms_median", o_fp), rng(t_m1, "latency_ms_median", t_fp), rng(t_m23, "latency_ms_median", t_fp))
 spread = max(r["latency_round_spread_pct"] for r in rows if r.get("latency_round_spread_pct") is not None)
 o_m1 = [r for r in ONNX if "m1_" in r["model"]]
@@ -140,14 +143,14 @@ def fmtr(a):
 latj = J("latency.json")
 n_rounds = latj["m0_fp32"]["rounds"]
 ONNX_KEYS = ["s512_m1_all_int8_pc", "s512_m1_all_int8_pt", "s512_m2_backbone_int8_pc", "s512_m2_backbone_int8_pt", "s512_m3_backbone_neck_int8_pc", "s512_m3_backbone_neck_int8_pt"]
-TFL_KEYS = ["tflite_s512_m1_all_int8_pc", "tflite_s512_m1_all_int8_pt", "tflite_s512_m2_backbone_int8_pc", "tflite_s512_m2_backbone_int8_pt", "tflite_s512_m3_backbone_neck_int8_pc", "tflite_s512_m3_backbone_neck_int8_pt"]
+TFL_KEYS = ["tflite_t512_m1_all_int8_pc", "tflite_t512_m1_all_int8_pt", "tflite_t512_m2_backbone_int8_pc", "tflite_t512_m2_backbone_int8_pt", "tflite_t512_m3_backbone_neck_int8_pc", "tflite_t512_m3_backbone_neck_int8_pt"]
 faster_rounds = lambda keys, base: [sum(a < b for a, b in zip(latj[k]["round_medians_ms"], latj[base]["round_medians_ms"])) for k in keys]
 fr_o, fr_t = faster_rounds(ONNX_KEYS, "m0_fp32"), faster_rounds(TFL_KEYS, "tflite_m0_fp32")
-spread = max(v["round_spread_pct"] for v in latj.values())
+spread = max(latj[k]["round_spread_pct"] for k in ONNX_KEYS + TFL_KEYS)
 if (R / "calib_method.json").exists():
     cm = J("calib_method.json")["minmax"]["mAP50-95"]
-    pe, tf_ = g("ONNX", "m3_backbone_neck_int8_pc")["mAP50-95"], g("TFLite", "tflite_m3_backbone_neck_int8_pc")["mAP50-95"]      # first-period (640 px) models, as in the calibration study
-    cm_text = (f"To test the calibration explanation directly (first period, 640 px), the ONNX M3 per-channel model was rebuilt with min-max calibration (the method the TFLite converter uses): it scores {cm:.4f}, against {pe:.4f} with percentile calibration and {tf_:.4f} for the TFLite model. "
+    pe, tf_ = ST["m3_pc_onnx"], ST["m3_pc_tflite"]      # earlier (640 px) models, as in the calibration study
+    cm_text = (f"To test the calibration explanation directly (earlier 640 px models), the ONNX M3 per-channel model was rebuilt with min-max calibration (the method the TFLite converter uses): it scores {cm:.4f}, against {pe:.4f} with percentile calibration and {tf_:.4f} for the TFLite model. "
                + (f"Min-max calibration therefore reproduces the TFLite accuracy (difference {abs(cm - tf_) * 100:.2f} mAP points), so the calibration method accounts for essentially all of the ONNX-to-TFLite gap for this design." if abs((pe - cm) / (pe - tf_) - 1) < 0.1 else f"Switching to min-max therefore accounts for {(pe - cm) / (pe - tf_) * 100:.0f}% of the ONNX-to-TFLite gap for this design."))
 else:
     cm_text = "A likely reason is the calibration method (percentile in ONNX Runtime, min-max in the TFLite converter); this was not isolated."
@@ -157,7 +160,7 @@ if (R / "profile.json").exists():
     op = lambda m, k: pj[m]["by_op_ms"].get(k, 0.0)
     rg_ = lambda m, k: pj[m]["by_region_ms"].get(k, 0.0)
     act = "activation (sigmoid/mul)"
-    prof_text = (f" A per-operation profile of the ONNX models explains why the gain is not larger: INT8 convolutions are faster ({op('M1 per-channel', 'conv'):.1f} ms against {op('FP32', 'conv'):.1f} ms for FP32), "
+    prof_text = (f" A per-operation profile of the earlier 640 px ONNX models explains why the gain is not larger: INT8 convolutions are faster ({op('M1 per-channel', 'conv'):.1f} ms against {op('FP32', 'conv'):.1f} ms for FP32), "
                  f"but the SiLU activation (a sigmoid followed by a multiply) costs {op('M1 per-channel', act):.1f} ms in the INT8 model against {op('FP32', act):.1f} ms in FP32, where it is fused into the convolution, so most of the convolution saving is spent on activations. "
                  f"Quantizing the neck does not speed it up: the neck region takes {rg_('M3 per-channel', 'neck'):.1f} ms in M3 and {rg_('M1 per-channel', 'neck'):.1f} ms in M1 against {rg_('FP32', 'neck'):.1f} ms in FP32, which is why M2 (neck left in FP32) is the fastest ONNX design. "
                  f"(Profiler kernel times include profiling overhead and do not add up to wall-clock time; this is how ONNX Runtime on this CPU behaves and says nothing about an NPU.)")
@@ -165,7 +168,7 @@ if (R / "profile.json").exists():
 era_names = eras.era_chart_files(R / "charts")
 html_doc = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>YOLOv5n INT8 Benchmark, Day 2</title>
+<title>YOLOv5n INT8 Benchmark</title>
 <style>
 :root {{ color-scheme: light; }} * {{ box-sizing: border-box; }}
 html {{ background:#fff; }}
@@ -194,24 +197,26 @@ footer {{ margin-top:64px; padding-top:16px; border-top:1px solid #ddd; color:#7
 </style></head><body><main class="page">
 
 <h1>INT8 Quantization of YOLOv5n for an Embedded NPU Target</h1>
-<p class="meta">Day 2 benchmark report &nbsp;|&nbsp; YOLOv5n v7.0 (original, anchor-based) &nbsp;|&nbsp; COCO val2017, all 5000 images &nbsp;|&nbsp; ONNX Runtime and TFLite, CPU, 4 threads</p>
+<p class="meta">Benchmark report &nbsp;|&nbsp; YOLOv5n v7.0 (original, anchor-based) &nbsp;|&nbsp; COCO val2017, all 5000 images &nbsp;|&nbsp; ONNX Runtime, TFLite and OpenVINO, CPU, 4 pinned cores</p>
 
 <div class="summary">
 <p><b>Summary.</b> We compared an FP32 YOLOv5n baseline (mAP50-95 {b_map:.3f}, matching the published figure) with three INT8 designs, each quantized per-channel and per-tensor, in both ONNX and TFLite. The designs differ in which parts of the network stay in FP32: <b>M1</b> none, <b>M2</b> neck and head, <b>M3</b> head only.</p>
 <ul>
 <li><b>Best accuracy:</b> M2 per-channel keeps {m2o['accuracy_retained_pct']:.1f}% of FP32 accuracy in ONNX ({m2t['accuracy_retained_pct']:.1f}% in TFLite) at {m2o['compression_ratio']:.1f}x compression.</li>
 <li><b>Best trade-off:</b> M3 per-channel keeps {m3o['accuracy_retained_pct']:.1f}% (ONNX) and {m3t['accuracy_retained_pct']:.1f}% (TFLite) at {m3o['compression_ratio']:.1f}x and {m3t['compression_ratio']:.1f}x compression ({m3o['size_mb']:.2f} MB and {m3t['size_mb']:.2f} MB).</li>
-<li><b>Per-channel beats per-tensor</b> in every pairing, by {pc_lo:.1f} to {pc_hi:.1f} mAP points in the first-period (640 px) measurement, where the difference is statistically real in all of them.</li>
+<li><b>Per-channel beats per-tensor</b> in every pairing, by {pc_lo:.1f} to {pc_hi:.1f} mAP points in the earlier (640 px) measurement, where the difference is statistically real in all of them.</li>
 <li><b>The detection head is the sensitive part.</b> Quantizing the head alone costs {head_loss:.1f}% accuracy; every other single layer costs {others:.1f}% or less. Keeping the head in FP32 is worth {h_lo:.1f} to {h_hi:.1f} mAP points.</li>
 <li><b>A fully INT8 model works</b> once box coordinates are normalised to 0-1 ({m1n['accuracy_retained_pct']:.1f}% retained in ONNX, {m1t['accuracy_retained_pct']:.1f}% in TFLite). With pixel-scale boxes it scores zero.</li>
-<li><b>Speed and memory on this CPU:</b> INT8 ONNX models take {sp_o[0]:.0f} to {sp_o[1]:.0f}% less time per image than FP32 and all-INT8 TFLite models {sp_t1[0]:.0f} to {sp_t1[1]:.0f}% less; TFLite pipelines that keep an FP32 stage {sp_t23[0]:.0f} to {sp_t23[1]:.0f}% less (all against the 640 px FP32 baseline; the INT8 models run at 512 px). The all-INT8 TFLite pipelines also use about {fmtr(mt1)} less memory. These are desktop-CPU figures and do not transfer to an NPU (Section 7).</li>
-<li><b>Faster options explored later:</b> a smaller input size is the biggest lever. At 512 px the plain INT8 M3 model in OpenVINO is {extra_sections.L('ov_m0_fp32') / extra_sections.L('ovq_f512_m3_mixed'):.2f}x faster than the 640 px FP32 model at {extra_sections.acc['ovq_f512_m3_mixed']['mAP50-95'] / extra_sections.BASE * 100:.1f}% of its accuracy; replacing the 12 largest SiLU activations with ReLU (R55, Detect head frozen and bit-identical) gives {extra_sections.L('ov_m0_fp32') / extra_sections.L('ovq_hybrid_s55_v2_m3_mixed'):.2f}x at {extra_sections.acc['ovq_hybrid_s55_v2_m3_mixed']['mAP50-95'] / extra_sections.BASE * 100:.1f}% at 640 px. See the sections after the six benchmarks.</li>
+<li><b>Speed and memory on this CPU:</b> INT8 ONNX models take {rr(sp_o)} less time per image than FP32 and all-INT8 TFLite models {rr(sp_t1)} less; TFLite pipelines that keep an FP32 stage {rr(sp_t23)} less (all against the 640 px FP32 baseline; the INT8 models run at 512 px). The all-INT8 TFLite pipelines also use about {fmtr(mt1)} less memory. These are desktop-CPU figures and do not transfer to an NPU (Section 7).</li>
+<li><b>Input size:</b> the INT8 models take a 512 x 512 picture instead of 640 x 640, which removes about a third of the computation. At 512 px the OpenVINO M3 model is {extra_sections.L('ov_m0_fp32') / extra_sections.L('ovq_f512_m3_mixed'):.2f}x faster than the 640 px FP32 model at {extra_sections.acc['ovq_f512_m3_mixed']['mAP50-95'] / extra_sections.BASE * 100:.1f}% of its accuracy. See the sections after the six benchmarks.</li>
 </ul></div>
 
 {eras.eras_html(img, era_names)}
+<h3>Reading the charts</h3>
+{"".join(eras.era_note(m) for m in ("map50", "map", "size", "time", "mem", "f1"))}
 
 <h2>1. Setup</h2>
-<p><b>Stage shown.</b> Tables 2 to 5 and Figures 1, 4, 5 and 6 show the current stage: the INT8 models built at 512 x 512 input, with the 640 x 640 FP32 model as the baseline they replace. The studies in Sections 3, 4, 8 and 9 (box scale, layer sensitivity, calibration size, statistics) were done on the first-period 640 x 640 models and are labelled as such.</p>
+<p><b>Stage shown.</b> Tables 2 to 5 and Figures 1, 4, 5 and 6 show the models: the INT8 models built at 512 x 512 input, with the 640 x 640 FP32 model as the baseline they replace. The studies in Sections 3, 4, 8 and 9 (box scale, layer sensitivity, calibration size, statistics) were done on the earlier 640 x 640 models and are labelled as such.</p>
 <p><b>Models.</b> YOLOv5n has a backbone (layers 0-9), a PANet neck (10-23) and a Detect head (24). Table 1 lists the designs. Each INT8 design is built twice: <i>per-channel</i> (one scale per output channel of each convolution) and <i>per-tensor</i> (one scale per layer).</p>
 <div class="tablewrap"><table class="text"><caption>Table 1. The designs compared.</caption>
 <thead><tr><th>ID</th><th>Backbone</th><th>Neck (PANet)</th><th>Head (Detect)</th><th>Variants</th></tr></thead><tbody>
@@ -219,8 +224,8 @@ footer {{ margin-top:64px; padding-top:16px; border-top:1px solid #ddd; color:#7
 <tr><td>M1</td><td>INT8</td><td>INT8</td><td>INT8</td><td>per-channel, per-tensor</td></tr>
 <tr><td>M2</td><td>INT8</td><td>FP32</td><td>FP32</td><td>per-channel, per-tensor</td></tr>
 <tr><td>M3</td><td>INT8</td><td>INT8</td><td>FP32</td><td>per-channel, per-tensor</td></tr></tbody></table></div>
-<p><b>Quantization.</b> Static post-training INT8: weights signed 8-bit, activations 8-bit. In ONNX, ONNX Runtime QDQ with percentile calibration, keeping FP32 layers out by node name. In TFLite the converter cannot easily keep part of a network in FP32, so the network is split at the backbone/neck/head boundaries into separate files; INT8 stages use full-integer conversion with min-max calibration, FP32 stages stay float, and a runner chains them. All variants calibrate on the same 500 images from COCO <i>train2017</i>.</p>
-<p><b>Evaluation.</b> All 5000 COCO val2017 images, scored with the official <code>pycocotools</code>, with preprocessing and post-processing (square 640 letterbox, confidence 0.001, NMS IoU 0.6, up to 300 detections) matching the official YOLOv5 validation. The FP32 model scores {b_map:.3f}, in line with the published 28.0.</p>
+<p><b>Quantization.</b> Static post-training INT8: weights signed 8-bit, activations 8-bit. In ONNX, ONNX Runtime QDQ with percentile calibration, keeping FP32 layers out by node name. In TFLite the converter uses full-integer conversion with min-max calibration. The current 512 px models are single files in which the layers that must stay FP32 (M2, M3) are excluded with the converter's quantization debugger; the earlier 640 px M2 and M3 were instead split at the backbone/neck/head boundaries into separate files chained by a small runner (see the section on how the TFLite models are made and run, below). TFLite models run on the LiteRT runtime. All variants calibrate on the same 500 images from COCO <i>train2017</i> (letterboxed to the input size of the model). OpenVINO models use NNCF post-training quantization (mixed preset) with the same images.</p>
+<p><b>Evaluation.</b> All 5000 COCO val2017 images, scored with the official <code>pycocotools</code>, with preprocessing and post-processing (square letterbox at the model's input size (640 or 512), confidence 0.001, NMS IoU 0.6, up to 300 detections) matching the official YOLOv5 validation. The FP32 model scores {b_map:.3f}, in line with the published 28.0.</p>
 <p><b>Statistics.</b> To tell real differences from noise, the 5000 images are split into 10 disjoint folds; each model is scored per fold and paired differences get a 95% t-interval (Table 6).</p>
 
 <h2>2. Accuracy</h2>
@@ -229,7 +234,7 @@ footer {{ margin-top:64px; padding-top:16px; border-top:1px solid #ddd; color:#7
 {T_ACC}
 <p><b>Per-channel versus per-tensor.</b> In all six pairings per-channel is better, by {pc_lo:.1f} to {pc_hi:.1f} mAP points (Table 6). Convolution output channels in this network have quite different weight ranges, and one shared scale wastes resolution on the narrow ones.</p>
 <p><b>How much to quantize.</b> Moving from M2 to M3 (also quantizing the neck) costs a further {(m2o['mAP50-95'] - m3o['mAP50-95']) * 100:.1f} mAP points in ONNX per-channel, while shrinking the file from {m2o['size_mb']:.2f} to {m3o['size_mb']:.2f} MB. That is a good price for the saving.</p>
-<p><b>ONNX versus TFLite.</b> In the current stage ONNX is {cur_gap_lo:.1f} to {cur_gap_hi:.1f} mAP points better than TFLite for the same design (first period: {ot_lo:.1f} to {ot_hi:.1f}). {cm_text}</p>
+<p><b>ONNX versus TFLite.</b> ONNX is {cur_gap_lo:.1f} to {cur_gap_hi:.1f} mAP points better than TFLite for the same design (earlier 640 px models: {ot_lo:.1f} to {ot_hi:.1f}). {cm_text}</p>
 <p><b>Object size.</b> Small objects have the lowest AP in every model. When the head is also INT8 (M1) they are hit hardest: 20 to 30% of small-object AP is lost, against 5 to 11% for large objects. With an FP32 head (M2, M3) the loss is spread across sizes, and no size class is consistently worst.</p>
 
 <h2>3. The box-scale finding</h2>
@@ -259,7 +264,7 @@ footer {{ margin-top:64px; padding-top:16px; border-top:1px solid #ddd; color:#7
 <figure>{img('3_latency_memory.png', 'Latency and memory')}
 <figcaption><b>Figure 6.</b> Median time per image (whisker to the 95th percentile) and memory added to the process during inference, for every model.</figcaption></figure>
 {T_RT}
-<p><b>Speed.</b> Quantization is working: ONNX Runtime executes the INT8 designs with integer convolution kernels. Each model was timed over {n_rounds} interleaved rounds (fresh process per round). On this CPU, INT8 ONNX models take {sp_o[0]:.0f} to {sp_o[1]:.0f}% less time per image than FP32, the all-INT8 TFLite models {sp_t1[0]:.0f} to {sp_t1[1]:.0f}% less, and the TFLite designs that keep an FP32 stage (M2, M3) {sp_t23[0]:.0f} to {sp_t23[1]:.0f}% less, because that stage still runs as float. In every one of the {n_rounds} rounds each ONNX INT8 model was faster than the FP32 model, and each TFLite INT8 pipeline was faster in at least {min(fr_t)} of {n_rounds}. Timing is noisy, though: the same model varied by up to {spread:.0f}% between rounds (laptop CPU frequency and temperature drift), so small gaps <i>between INT8 variants</i> (for example per-channel versus per-tensor) are not meaningful, while the gap to FP32 is.{prof_text} <b>None of this is NPU speed.</b> An NPU executes only INT8 operations, so on a real board the FP32 stages of M2 and M3 would fall back to the host CPU, and the ranking could differ substantially. That needs measuring on the target hardware.</p>
+<p><b>Speed.</b> Quantization is working: ONNX Runtime executes the INT8 designs with integer convolution kernels. Each model was timed over {n_rounds} interleaved rounds (fresh process per round). On this CPU, INT8 ONNX models take {rr(sp_o)} less time per image than FP32, the all-INT8 TFLite models {rr(sp_t1)} less, and the TFLite designs that keep an FP32 stage (M2, M3) {rr(sp_t23)} less, because those layers still run as float. Each ONNX INT8 model was faster than the FP32 model in {min(fr_o)} of the {n_rounds} rounds, and each TFLite INT8 pipeline in {min(fr_t)} of {n_rounds}. Timing is noisy, though: the same model varied by up to {spread:.0f}% between rounds (laptop CPU frequency and temperature drift), so small gaps <i>between INT8 variants</i> (for example per-channel versus per-tensor) are not meaningful, while the gap to FP32 is.{prof_text} <b>None of this is NPU speed.</b> An NPU executes only INT8 operations, so on a real board the FP32 stages of M2 and M3 would fall back to the host CPU, and the ranking could differ substantially. That needs measuring on the target hardware.</p>
 <p><b>Memory.</b> Table 5 gives the memory a model adds to a process that already has the runtime loaded, at load time and at its peak during inference (which includes the activation tensors). The FP32 ONNX model adds {o_fp["mem_peak_added_mb"]:.0f} MB at peak; the all-INT8 ONNX models add {vs2(mo1)}. The ONNX models that keep FP32 parts (M2, M3) add {vs2(mo23)}: they save less than the all-INT8 models because the FP32 parts keep full-size tensors (a likely explanation, not verified). In TFLite the effect is clearer: the FP32 pipeline adds {t_fp["mem_peak_added_mb"]:.0f} MB, the all-INT8 pipelines {vs2(mt1)}, and M2 and M3 {vs2(mt23)}. Memory added at load is similar across ONNX models (about {min(r["mem_load_mb"] for r in ONNX if r["mem_load_mb"] is not None):.0f} to {max(r["mem_load_mb"] for r in ONNX if r["mem_load_mb"] is not None):.0f} MB), probably because the runtime re-packs weights whatever their precision (not verified). The runtime's own baseline (about {o_fp["mem_baseline_mb"]:.0f} MB for ONNX Runtime and {t_fp["mem_baseline_mb"]:.0f} MB for TensorFlow) is excluded. On a memory-limited board, activation memory matters more than the file size.</p>
 
 <h2>8. Calibration set size</h2>
@@ -273,23 +278,26 @@ footer {{ margin-top:64px; padding-top:16px; border-top:1px solid #ddd; color:#7
 {T_PAIR}
 <p>Differences in this table are measured in mAP points on 500-image folds, so they are slightly larger in absolute terms than the same differences on the full set, but they rank the models the same way.</p>
 
-{extra_sections.embed(img("8_speed_accuracy_tradeoff.png", "Speed-up versus accuracy retained"))}
+{extra_sections.embed(img("8_speed_accuracy_tradeoff.png", "Speed-up versus accuracy retained"), limits=False)}
 
 <h2>10. Recommendations</h2>
 <ul>
 <li>Use <b>per-channel</b> quantization wherever the target runtime supports it.</li>
-<li>Normalise the box output to 0-1 before quantizing any model that includes the head.</li>
+<li>Normalise the box output to 0-1 (divide by the input size) before quantizing any model that includes the head.</li>
 <li>For accuracy first, choose <b>M2</b>; for the best size-accuracy balance, choose <b>M3</b>; choose <b>M1</b> only if the whole model must run as INT8 (for example entirely on an NPU), accepting the accuracy cost.</li>
-<li>Do not spend effort on calibration set size beyond about 100 images for this model.</li>
-<li>Next: time the candidates on the target board, and try a mixed design that keeps only the most sensitive layers (23 and 24) in FP32.</li>
+<li>If speed matters more than the last few points of accuracy, <b>lower the input size</b>: at 512 px the M2 and M3 models keep 93 to 97% of the FP32 accuracy in all three runtimes and run 1.7 to 2.2 times as fast as the 640 px FP32 model of the same runtime. Check that the objects of interest are not tiny.</li>
+<li>Use a compiled non-maximum-suppression routine; the reference numpy one took longer than the model.</li>
+<li>Do not spend effort on calibration set size beyond about 100 images for this model (earlier 640 px study).</li>
+<li>Next: time the candidates on the target board; try channel pruning and quantization-aware training; try a mixed design that keeps only the most sensitive layers (23 and 24) in FP32.</li>
 </ul>
 
 <h2>11. Limitations</h2>
 <ul>
-<li><b>No NPU measurements.</b> Timing is from a desktop CPU (ONNX Runtime and TFLite with XNNPACK). It is a proxy only.</li>
-<li><b>Different calibration methods</b> in ONNX (percentile) and TFLite (min-max) mean the two formats are not like-for-like; the TFLite converter offers no percentile option.</li>
-<li><b>Memory</b> is the increase in resident memory of a desktop process (sampled every 2 ms), not NPU or device memory, and it excludes the runtime's own baseline.</li>
-<li><b>Layer sensitivity</b> uses the first 1000 images and one layer at a time; interactions between layers are not captured.</li>
+<li><b>No NPU measurements.</b> Timing is from a laptop CPU (ONNX Runtime, TFLite with XNNPACK and OpenVINO). It is a proxy only, and the ranking of designs differs between runtimes (see the notes under the charts); the exact target board is not known.</li>
+<li><b>Different calibration methods</b> in ONNX (percentile) and TFLite (min-max) mean the two formats are not like-for-like; the TFLite converter offers no percentile option. OpenVINO models use a third quantizer (NNCF), so ONNX Runtime and OpenVINO are different quantizers and runtimes, not one model on two engines.</li>
+<li><b>Memory</b> is the increase in resident memory of a desktop process (sampled every 2 ms), not NPU or device memory, and it excludes the runtime's own baseline. OpenVINO's INT8 models use more than its FP32 model; the reason (probably compiling the quantized graph) was not verified.</li>
+<li><b>Timing noise:</b> round-to-round spread is a few percent for most models and occasionally much larger; the median of nine interleaved rounds is used. Differences of a few percent between INT8 variants are not meaningful.</li>
+<li><b>Layer sensitivity</b> uses the first 1000 images and one layer at a time; interactions between layers are not captured. The sensitivity, calibration-size, box-scale and statistical studies were run on the earlier 640 px models.</li>
 <li><b>Data.</b> COCO val2017 only. Results on other image domains may differ.</li>
 </ul>
 

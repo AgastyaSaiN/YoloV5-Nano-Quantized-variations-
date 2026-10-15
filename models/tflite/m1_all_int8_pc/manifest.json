@@ -1,8 +1,0 @@
-{
-  "design": "m1_all_int8_pc",
-  "stages": [
-    "stage1.tflite"
-  ],
-  "note": "all INT8 incl. head",
-  "size_mb": 2.189424
-}

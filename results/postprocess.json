@@ -1,8 +1,8 @@
 {
   "identical_images_of_100": 100,
-  "post_ms_numpy_conf0.001": 26.603149992297404,
-  "post_ms_compiled_conf0.001": 5.890349988476373,
-  "post_ms_numpy_conf0.25": 12.450049980543554,
-  "post_ms_compiled_conf0.25": 3.1039000023156404,
-  "pre_ms": 2.9253500106278807
+  "post_ms_numpy_conf0.001": 22.57830000053218,
+  "post_ms_compiled_conf0.001": 6.105300000854186,
+  "post_ms_numpy_conf0.25": 12.576749999425374,
+  "post_ms_compiled_conf0.25": 3.108700000666431,
+  "pre_ms": 4.273349999493803
 }

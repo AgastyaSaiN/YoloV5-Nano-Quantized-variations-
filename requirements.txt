@@ -5,6 +5,9 @@ torch==2.3.1
 torchvision==0.18.1
 onnx
 onnxruntime==1.22.1
+openvino
+nncf
+ai-edge-litert
 pycocotools
 psutil
 matplotlib
@@ -16,4 +19,4 @@ tqdm
 
 # TensorFlow venv (Day 2/.venv; TFLite conversion and TFLite evaluation) - pins that work together:
 #   numpy==1.26.4  tensorflow==2.15.1  tf_keras  onnx==1.16.2  onnxruntime==1.18.1  onnx2tf  onnx_graphsurgeon
-#   sng4onnx  onnxsim  ai_edge_litert  pycocotools  psutil  pillow  opencv-python-headless  protobuf<4.26
+#   sng4onnx  onnxsim  pycocotools  psutil  pillow  opencv-python-headless  protobuf<4.26

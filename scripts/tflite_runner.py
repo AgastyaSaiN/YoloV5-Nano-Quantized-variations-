@@ -7,7 +7,11 @@ import json
 from pathlib import Path
 
 import numpy as np
-import tensorflow as tf
+try:                                           # the current LiteRT runtime (pip install ai-edge-litert) is much faster at INT8 than TensorFlow 2.15's built-in one
+    from ai_edge_litert.interpreter import Interpreter
+except ImportError:
+    import tensorflow as tf
+    Interpreter = tf.lite.Interpreter
 
 THREADS = 4
 
@@ -18,7 +22,7 @@ class Pipeline:
         man = json.loads((self.folder / "manifest.json").read_text())
         self.stages = []
         for name in man["stages"]:
-            it = tf.lite.Interpreter(model_path=str(self.folder / name), num_threads=threads)
+            it = Interpreter(model_path=str(self.folder / name), num_threads=threads)
             it.allocate_tensors()
             self.stages.append((it, it.get_input_details(), it.get_output_details()))
         self.size_mb = man["size_mb"]
@@ -34,7 +38,15 @@ class Pipeline:
                 perm = self.input_perm.get((k, tuple(d["shape"])))
                 if perm:
                     v = np.ascontiguousarray(v.transpose(perm))
+                if d["dtype"] != np.float32:                      # integer-input model: quantize the float picture with the model's own scale / zero point
+                    scale, zero = d["quantization"]
+                    info = np.iinfo(d["dtype"])
+                    v = np.clip(np.round(v / scale) + zero, info.min, info.max).astype(d["dtype"])
                 it.set_tensor(d["index"], v)
             it.invoke()
             feeds = [it.get_tensor(d["index"]) for d in outs]
+            for j, d in enumerate(outs):                          # integer-output model: back to float
+                if d["dtype"] != np.float32:
+                    scale, zero = d["quantization"]
+                    feeds[j] = (feeds[j].astype(np.float32) - zero) * scale
         return feeds[0].reshape(-1, 85)

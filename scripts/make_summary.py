@@ -31,20 +31,17 @@ def add(fmt, key, accrec, design, gran, boxes):
     })
 
 
-# ONNX
-for key in ["m0_fp32", "m1_all_int8_pc", "m1_all_int8_pt", "m1_all_int8_pc_norm", "m1_all_int8_pt_norm",
-            "m2_backbone_int8_pc", "m2_backbone_int8_pt", "m3_backbone_neck_int8_pc", "m3_backbone_neck_int8_pt",
-            "s512_m1_all_int8_pc", "s512_m1_all_int8_pt", "s512_m2_backbone_int8_pc", "s512_m2_backbone_int8_pt",
-            "s512_m3_backbone_neck_int8_pc", "s512_m3_backbone_neck_int8_pt"]:      # s512_ = current stage (512 px input)
+# ONNX Runtime: FP32 baseline (640 px) and the INT8 models at 512 px
+for key in ["m0_fp32"] + [f"s512_{d}_{g}" for d in ("m1_all_int8", "m2_backbone_int8", "m3_backbone_neck_int8") for g in ("pc", "pt")]:
     if key not in acc:
         continue
     d = key.replace("s512_", "")[:2]
-    gran = "-" if d == "m0" else ("per-channel" if "_pc" in key else "per-tensor")
-    add("ONNX", key, acc[key], d, gran, "0-1" if key.endswith("_norm") or key.startswith("s512_") else "pixels")
+    gran = "-" if d == "m0" else ("per-channel" if key.endswith("_pc") else "per-tensor")
+    add("ONNX", key, acc[key], d, gran, "0-1" if key.startswith("s512_") else "pixels")
 # TFLite
 for key in acc_t:
-    d = key.replace("s512_", "").split("_")[1]
-    if key.startswith("tflite_s512_m0"):                    # FP32 pipeline at 512 px is not a benchmarked model
+    d = key.replace("s512_", "").replace("t512_", "").split("_")[1]
+    if key.startswith("tflite_s512_") or key.endswith("_io8"):                      # retired two-file pipelines and the FP32 model at 512 px are not part of the tables
         continue
     gran = "-" if d == "m0" else ("per-channel" if key.endswith("_pc") else "per-tensor")
     add("TFLite", key, acc_t[key], d, gran, "0-1")
